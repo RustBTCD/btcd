@@ -1,0 +1,19 @@
+[package]
+name = "rust-btcd"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+# Stay on the 0.32.x line; 0.33 is a beta with the crate split in progress.
+bitcoin = { version = "0.32", features = ["std", "rand-std"] }
+# Script verification via Bitcoin Core's C++ code. Disabled until script checks are wired in:
+# it builds all of Bitcoin Core with cmake on every clean build.
+# bitcoinkernel = "0.3"
+# Only lz4 and zstd: skips building snappy, zlib and bzip2.
+rocksdb = { version = "0.25", default-features = false, features = ["lz4", "zstd", "bindgen-runtime"] }
+serde = { version = "1.0.229", features = ["derive"] }
+thiserror = "2"
+toml = "1.1.6"
+
+[dev-dependencies]
+tempfile = "3.27.0"

@@ -1,0 +1,32 @@
+# rust-btcd configuration.
+# Usage: rust-btcd [path/to/rust-btcd.toml]
+# Every key is optional. The values below are the defaults.
+
+[storage]
+# Directory holding the RocksDB database. Created if missing.
+path = "data"
+# RocksDB block cache shared by all column families, in MiB.
+block_cache_mib = 256
+# Upper bound on open files. macOS has a default soft limit of 256.
+max_open_files = 200
+# Values at least this large go to blob files and skip compaction, in bytes.
+min_blob_size_bytes = 4096
+# Number of RocksDB info log files to keep.
+keep_log_files = 4
+# Threads for flushes and compactions. Defaults to the number of CPU cores.
+# background_threads = 8
+
+# Blob garbage collection frees disk space held by deleted blocks and undo data.
+# RocksDB cannot free part of a blob file: it copies the still-live values out of an old
+# file during compaction, then deletes the whole file. Both values below are fractions
+# from 0.0 to 1.0, not sizes or times.
+
+# Share of blob files, counted by number of files and taken oldest first, whose live values
+# compaction may copy out so the files can be deleted.
+# 0.25 = the oldest quarter of files. 0.0 = never clean up, deleted blocks keep their space.
+# 1.0 = free all garbage, but compaction may copy every stored block again.
+blob_gc_oldest_files_fraction = 0.25
+# Share of bytes in those oldest files that are garbage at which RocksDB schedules an extra
+# compaction just to clean them. 1.0 = only when the files are entirely garbage. Below the
+# trigger, cleanup waits for compactions that run anyway.
+blob_gc_garbage_ratio_trigger = 1.0
