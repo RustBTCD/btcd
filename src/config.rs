@@ -7,12 +7,42 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+use crate::chain_params::Chain;
+use crate::p2p::P2pConfig;
 use crate::storage::StorageConfig;
 
 #[derive(Debug, Clone, Default, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Config {
+    /// Chain to follow: `main`, `testnet4`, `signet` or `regtest`.
+    pub chain: Chain,
+    /// Most detailed log level printed.
+    pub log_level: LogLevel,
     pub storage: StorageConfig,
+    pub p2p: P2pConfig,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LogLevel {
+    Error,
+    Warn,
+    #[default]
+    Info,
+    Debug,
+    Trace,
+}
+
+impl From<LogLevel> for tracing::Level {
+    fn from(level: LogLevel) -> Self {
+        match level {
+            LogLevel::Error => tracing::Level::ERROR,
+            LogLevel::Warn => tracing::Level::WARN,
+            LogLevel::Info => tracing::Level::INFO,
+            LogLevel::Debug => tracing::Level::DEBUG,
+            LogLevel::Trace => tracing::Level::TRACE,
+        }
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -69,6 +99,23 @@ mod tests {
         let config = Config::from_toml("[storage]\nblock_cache_mib = 1024\n").unwrap();
         assert_eq!(config.storage.block_cache_mib, 1024);
         assert_eq!(config.storage.path, StorageConfig::default().path);
+    }
+
+    #[test]
+    fn chain_and_p2p_settings_parse() {
+        let config = Config::from_toml(
+            "chain = \"regtest\"\nlog_level = \"debug\"\n[p2p]\npeers = [\"127.0.0.1:18444\"]\n",
+        )
+        .unwrap();
+        assert_eq!(config.chain, Chain::Regtest);
+        assert_eq!(config.log_level, LogLevel::Debug);
+        assert_eq!(config.p2p.peers, vec!["127.0.0.1:18444".to_string()]);
+        assert_eq!(config.p2p.max_outbound, P2pConfig::default().max_outbound);
+    }
+
+    #[test]
+    fn unsupported_chains_are_rejected() {
+        assert!(Config::from_toml("chain = \"testnet\"\n").is_err());
     }
 
     #[test]

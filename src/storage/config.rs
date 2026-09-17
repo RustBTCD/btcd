@@ -6,7 +6,8 @@ use serde::Deserialize;
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct StorageConfig {
-    /// Directory holding the RocksDB database. Created if missing.
+    /// Base data directory. Each chain gets its own database in a subdirectory named after
+    /// the chain, for example `data/signet`. Created if missing.
     pub path: PathBuf,
     /// RocksDB block cache shared by all column families, in MiB.
     pub block_cache_mib: usize,

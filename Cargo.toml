@@ -13,7 +13,10 @@ bitcoin = { version = "0.32", features = ["std", "rand-std"] }
 rocksdb = { version = "0.25", default-features = false, features = ["lz4", "zstd", "bindgen-runtime"] }
 serde = { version = "1.0.229", features = ["derive"] }
 thiserror = "2"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "io-util", "sync", "time", "signal"] }
 toml = "1.1.6"
+tracing = "0.1"
+tracing-subscriber = "0.3"
 
 [dev-dependencies]
 tempfile = "3.27.0"
