@@ -11,6 +11,8 @@
 //! | `headers`      | block hash                 | [`HeaderEntry`]                         |
 //! | `height_index` | height (u32 BE)            | block hash, active chain only           |
 //! | `meta`         | fixed keys                 | tip hash                                |
+//! | `peers`        | address and port           | [`AddressRecord`], the address book     |
+//! | `bans`         | subnet                     | [`BanRecord`], manual bans              |
 
 // Stores are not wired into the node yet.
 #![allow(dead_code, unused_imports)]
@@ -21,6 +23,7 @@ mod coin;
 mod config;
 mod error;
 mod headers;
+mod network;
 mod utxo;
 
 use std::sync::{Arc, Mutex};
@@ -35,6 +38,7 @@ pub use coin::{BlockUndo, Coin};
 pub use config::StorageConfig;
 pub use error::{Result, StorageError};
 pub use headers::{BlockStatus, HeaderEntry, HeaderStore};
+pub use network::{AddressRecord, AddressStore, BanRecord, BanStore};
 pub use utxo::UtxoStore;
 
 pub(crate) mod cf {
@@ -44,6 +48,8 @@ pub(crate) mod cf {
     pub const HEADERS: &str = "headers";
     pub const HEIGHT_INDEX: &str = "height_index";
     pub const META: &str = "meta";
+    pub const PEERS: &str = "peers";
+    pub const BANS: &str = "bans";
 }
 
 pub(crate) mod meta_key {
@@ -83,6 +89,8 @@ impl Storage {
             ColumnFamilyDescriptor::new(cf::HEADERS, point_lookup_options(&cache)),
             ColumnFamilyDescriptor::new(cf::HEIGHT_INDEX, table_options(&cache)),
             ColumnFamilyDescriptor::new(cf::META, table_options(&cache)),
+            ColumnFamilyDescriptor::new(cf::PEERS, table_options(&cache)),
+            ColumnFamilyDescriptor::new(cf::BANS, table_options(&cache)),
         ];
 
         let db = DB::open_cf_descriptors(&db_opts, &config.path, descriptors)?;
@@ -102,6 +110,14 @@ impl Storage {
 
     pub fn headers(&self) -> HeaderStore {
         HeaderStore::new(self.db.clone())
+    }
+
+    pub fn addresses(&self) -> AddressStore {
+        AddressStore::new(self.db.clone())
+    }
+
+    pub fn bans(&self) -> BanStore {
+        BanStore::new(self.db.clone())
     }
 
     pub fn chain(&self) -> ChainStore {

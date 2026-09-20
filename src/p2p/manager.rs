@@ -1,115 +1,200 @@
-//! Owns all peer state and drives header sync and block download.
+//! Connection policy and the event loop.
 //!
-//! Flow:
-//! 1. Keep up to `max_outbound` connections, from the configured peers or DNS seeds.
-//! 2. Sync headers from one peer with repeated `getheaders` until a reply is not full.
-//! 3. After that, headers announced by any peer that extend the best chain are queued, and
-//!    their blocks are fetched with `getdata` and stored. Blocks are not validated yet.
+//! This is Bitcoin Core's `CConnman` role: decide whom to connect to, keep the target number
+//! of connections, drop peers that misbehave or go quiet, and hand messages to the protocol
+//! layer. Protocol handling lives in `processing.rs`, chain sync in `sync.rs`.
+//!
+//! Messages are handled round robin, one per peer per round, as Core does, so a peer that
+//! floods us cannot starve the others.
 
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::net::{Ipv6Addr, SocketAddr};
+use std::net::SocketAddr;
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use bitcoin::block::Header;
-use bitcoin::hashes::Hash;
+use bitcoin::BlockHash;
+use bitcoin::p2p::ServiceFlags;
 use bitcoin::p2p::message::NetworkMessage;
-use bitcoin::p2p::message_blockdata::{GetHeadersMessage, Inventory};
-use bitcoin::{Block, BlockHash};
 use tokio::net::lookup_host;
-use tokio::sync::mpsc;
+use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::{OwnedSemaphorePermit, mpsc};
 use tokio::time::timeout;
 use tracing::{debug, info, warn};
 
 use super::P2pError;
+use super::addrman::{AddressManager, Group, group_of};
+use super::banman::BanManager;
 use super::config::P2pConfig;
-use super::peer::{self, PeerCommand, PeerContext, PeerEvent, PeerId, PeerInfo};
+use super::connection::{self, ConnectionCommand, ConnectionConfig, ConnectionEvent, PeerId};
+use super::permissions::{PermissionTable, Permissions, Subnet};
+use super::transport::TransportKind;
 use crate::chain_params::Chain;
-use crate::header_chain::{HeaderChain, HeaderError};
-use crate::storage::{BlockStatus, Storage, StorageError};
+use crate::header_chain::HeaderChain;
+use crate::storage::Storage;
 
-/// Bitcoin Core `MAX_HEADERS_RESULTS`. A full reply means more headers may follow.
-const MAX_HEADERS: usize = 2000;
-/// Bitcoin Core `MAX_BLOCKS_IN_TRANSIT_PER_PEER`.
-const MAX_BLOCKS_IN_FLIGHT_PER_PEER: usize = 16;
-/// Buffer between peer tasks and the manager. When full, peers stop reading their sockets.
+/// Buffer between connection tasks and the manager.
 const EVENT_CHANNEL_CAPACITY: usize = 1024;
-/// How often timeouts are checked and connections refilled.
+/// How often timeouts are checked, connections refilled and state saved.
 const TICK: Duration = Duration::from_secs(5);
-/// Coinbase output prefix of a BIP141 witness commitment: OP_RETURN, push 36, 0xaa21a9ed.
-const WITNESS_COMMITMENT_PREFIX: [u8; 6] = [0x6a, 0x24, 0xaa, 0x21, 0xa9, 0xed];
+/// Below this many known addresses we ask the DNS seeds again.
+const MIN_ADDRESSES: usize = 64;
 
-struct ConnectedPeer {
-    info: PeerInfo,
-    commands: mpsc::UnboundedSender<PeerCommand>,
-    blocks_in_flight: usize,
-    /// Set once we asked the peer task to close; the peer gets no new requests.
-    disconnecting: bool,
+/// Why a connection was opened.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ConnectionKind {
+    /// Configured peer, always reconnected. Bitcoin Core's `-addnode`.
+    Manual,
+    /// Chosen from the address book.
+    Automatic,
+    /// Short connection that only tests whether an untried address works.
+    Feeler,
 }
 
-struct BlockRequest {
-    peer: PeerId,
-    since: Instant,
+/// Where a peer is in the version handshake.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Phase {
+    AwaitingVersion,
+    AwaitingVerack,
+    Ready,
+}
+
+pub(super) struct Peer {
+    pub addr: SocketAddr,
+    pub kind: ConnectionKind,
+    pub transport: TransportKind,
+    pub permissions: Permissions,
+    pub commands: mpsc::Sender<ConnectionCommand>,
+    pub phase: Phase,
+    /// Nonce we sent, to detect connecting to ourselves.
+    pub nonce: u64,
+    pub connected_at: Instant,
+    pub version: u32,
+    pub services: ServiceFlags,
+    pub user_agent: String,
+    pub start_height: i32,
+    pub next_ping: Instant,
+    pub ping_sent: Option<(u64, Instant)>,
+    pub latency: Option<Duration>,
+    /// Token bucket limiting how many addresses a peer may send us.
+    pub addr_tokens: f64,
+    pub addr_tokens_updated: Instant,
+    pub blocks_in_flight: usize,
+    pub disconnecting: bool,
+}
+
+impl Peer {
+    pub fn is_ready(&self) -> bool {
+        self.phase == Phase::Ready && !self.disconnecting
+    }
+}
+
+struct Connecting {
+    addr: SocketAddr,
+    kind: ConnectionKind,
+}
+
+pub(super) struct BlockRequest {
+    pub peer: PeerId,
+    pub since: Instant,
 }
 
 pub struct Manager {
-    chain: Chain,
-    config: P2pConfig,
-    storage: Storage,
-    headers: HeaderChain,
-    peer_ctx: Arc<PeerContext>,
-    events_tx: mpsc::Sender<PeerEvent>,
-    events_rx: mpsc::Receiver<PeerEvent>,
+    pub(super) chain: Chain,
+    pub(super) config: P2pConfig,
+    pub(super) storage: Storage,
+    pub(super) headers: HeaderChain,
+    pub(super) addrman: AddressManager,
+    pub(super) bans: BanManager,
+    permissions: PermissionTable,
+    conn_config: Arc<ConnectionConfig>,
 
+    events_tx: mpsc::Sender<ConnectionEvent>,
+    events_rx: mpsc::Receiver<ConnectionEvent>,
+    pub(super) peers: HashMap<PeerId, Peer>,
+    connecting: HashMap<PeerId, Connecting>,
+    /// Messages waiting to be handled, one queue per peer.
+    inbox: HashMap<PeerId, VecDeque<(NetworkMessage, OwnedSemaphorePermit)>>,
+    /// Peer order for the round-robin loop; rotated every round.
+    order: VecDeque<PeerId>,
     next_peer_id: PeerId,
-    connecting: HashMap<PeerId, SocketAddr>,
-    peers: HashMap<PeerId, ConnectedPeer>,
-    candidates: VecDeque<SocketAddr>,
-    last_resolve: Option<Instant>,
 
-    sync_peer: Option<PeerId>,
-    sync_requested_at: Option<Instant>,
-    /// Best header height when initial header sync finished. Blocks above it are fetched.
-    synced_height: Option<u32>,
+    manual_addrs: Vec<SocketAddr>,
+    last_lookup: Option<Instant>,
+    last_feeler: Instant,
 
-    wanted_blocks: VecDeque<BlockHash>,
-    in_flight: HashMap<BlockHash, BlockRequest>,
-    /// Peers that answered `notfound` for a block; it is not requested from them again.
-    not_found: HashMap<BlockHash, HashSet<PeerId>>,
+    pub(super) sync_peer: Option<PeerId>,
+    pub(super) sync_requested_at: Option<Instant>,
+    pub(super) synced_height: Option<u32>,
+    pub(super) wanted_blocks: VecDeque<BlockHash>,
+    pub(super) in_flight: HashMap<BlockHash, BlockRequest>,
+    pub(super) not_found: HashMap<BlockHash, HashSet<PeerId>>,
 }
 
 impl Manager {
-    /// Loads the header tree from storage, storing the genesis header on first start.
     pub async fn new(chain: Chain, config: P2pConfig, storage: Storage) -> Result<Self, P2pError> {
-        let store = storage.headers();
-        let stored = blocking(move || store.load_all()).await?;
-        let first_start = stored.is_empty();
-        let headers = HeaderChain::new(chain.network(), stored)?;
+        let permissions = PermissionTable::parse(&config.whitelist)?;
+        let mut configured_bans = Vec::new();
+        for entry in &config.bans {
+            configured_bans.push(Subnet::parse(entry)?);
+        }
+
+        let header_store = storage.headers();
+        let stored_headers = blocking(move || header_store.load_all()).await?;
+        let first_start = stored_headers.is_empty();
+        let headers = HeaderChain::new(chain.network(), stored_headers)?;
         if first_start {
             let genesis = headers.tip().clone();
             let store = storage.headers();
             blocking(move || store.put(&genesis)).await?;
         }
+
+        let address_store = storage.addresses();
+        let stored_addresses = blocking(move || address_store.load_all()).await?;
+        let ban_store = storage.bans();
+        let stored_bans = blocking(move || ban_store.load_all()).await?;
+
         info!(
-            "header chain loaded at height {}, tip {}",
+            "header chain loaded at height {}, tip {}; {} known addresses, {} stored bans",
             headers.height(),
-            headers.tip().block_hash()
+            headers.tip().block_hash(),
+            stored_addresses.len(),
+            stored_bans.len()
         );
 
+        let conn_config = Arc::new(ConnectionConfig {
+            network: chain.network(),
+            policy: config.transport,
+            connect_timeout: Duration::from_secs(config.connect_timeout_secs),
+            inactivity_timeout: Duration::from_secs(config.inactivity_timeout_secs),
+            send_queue: config.send_queue,
+            recv_quota: config.recv_quota,
+        });
         let (events_tx, events_rx) = mpsc::channel(EVENT_CHANNEL_CAPACITY);
+
         Ok(Self {
             chain,
-            peer_ctx: Arc::new(PeerContext::new(chain, &config)),
+            addrman: AddressManager::new(stored_addresses, config.address_book_max),
+            bans: BanManager::new(
+                stored_bans,
+                configured_bans,
+                config.ban_duration_secs,
+                config.discourage_duration_secs,
+            ),
+            permissions,
+            conn_config,
             config,
             storage,
             headers,
             events_tx,
             events_rx,
-            next_peer_id: 0,
-            connecting: HashMap::new(),
             peers: HashMap::new(),
-            candidates: VecDeque::new(),
-            last_resolve: None,
+            connecting: HashMap::new(),
+            inbox: HashMap::new(),
+            order: VecDeque::new(),
+            next_peer_id: 0,
+            manual_addrs: Vec::new(),
+            last_lookup: None,
+            last_feeler: Instant::now(),
             sync_peer: None,
             sync_requested_at: None,
             synced_height: None,
@@ -121,114 +206,194 @@ impl Manager {
 
     /// Runs until a storage error occurs. Peer failures are handled internally.
     pub async fn run(mut self) -> Result<(), P2pError> {
-        self.fill_outbound().await;
-        if self.connecting.is_empty() {
+        self.resolve_manual_peers().await;
+        self.seed_addresses().await;
+        if self.manual_addrs.is_empty() && self.addrman.is_empty() {
             return Err(P2pError::NoPeers);
         }
+        self.fill_connections();
 
         let mut tick = tokio::time::interval(TICK);
         loop {
             tokio::select! {
-                Some(event) = self.events_rx.recv() => self.handle_event(event).await?,
-                _ = tick.tick() => {
-                    self.expire_requests();
-                    self.fill_outbound().await;
+                Some(event) = self.events_rx.recv() => {
+                    self.handle_event(event);
+                    self.process_inbox().await?;
                 }
+                _ = tick.tick() => self.on_tick().await?,
             }
         }
     }
 
-    async fn handle_event(&mut self, event: PeerEvent) -> Result<(), P2pError> {
+    fn handle_event(&mut self, event: ConnectionEvent) {
         match event {
-            PeerEvent::Connected { id, info, commands } => self.on_connected(id, info, commands),
-            PeerEvent::Message { id, message } => self.on_message(id, message).await?,
-            PeerEvent::Disconnected { id, reason } => self.on_disconnected(id, &reason),
+            ConnectionEvent::Connected { id, kind, commands } => {
+                self.on_connected(id, kind, commands);
+            }
+            ConnectionEvent::Message {
+                id,
+                message,
+                permit,
+            } => {
+                if let Some(queue) = self.inbox.get_mut(&id) {
+                    queue.push_back((message, permit));
+                }
+            }
+            ConnectionEvent::Closed { id, reason } => self.on_closed(id, &reason),
         }
-        Ok(())
+    }
+
+    /// Handles at most one message per peer per round, as Bitcoin Core does.
+    async fn process_inbox(&mut self) -> Result<(), P2pError> {
+        loop {
+            while let Ok(event) = self.events_rx.try_recv() {
+                self.handle_event(event);
+            }
+
+            let mut handled = false;
+            for _ in 0..self.order.len() {
+                let Some(id) = self.order.pop_front() else {
+                    break;
+                };
+                self.order.push_back(id);
+
+                let next = self.inbox.get_mut(&id).and_then(VecDeque::pop_front);
+                if let Some((message, permit)) = next {
+                    handled = true;
+                    self.on_message(id, message).await?;
+                    // Releasing the permit here lets the peer's socket be read again.
+                    drop(permit);
+                }
+            }
+            if !handled {
+                return Ok(());
+            }
+        }
+    }
+
+    async fn on_tick(&mut self) -> Result<(), P2pError> {
+        let now = unix_now();
+        self.bans.sweep(now);
+        self.check_handshake_timeouts();
+        self.send_pings();
+        self.expire_requests();
+
+        if self.wants_more_addresses() {
+            self.seed_addresses().await;
+        }
+        self.open_feeler();
+        self.fill_connections();
+        self.save_network_state().await
     }
 
     // Connections
 
-    async fn fill_outbound(&mut self) {
-        while self.connecting.len() + self.peers.len() < self.config.max_outbound {
-            if self.candidates.is_empty() && !self.refill_candidates().await {
-                break;
+    fn fill_connections(&mut self) {
+        let now = unix_now();
+        for addr in self.manual_addrs.clone() {
+            if !self.is_connected_to(addr) {
+                self.connect_to(addr, ConnectionKind::Manual);
             }
-            let Some(addr) = self.candidates.pop_front() else {
-                break;
-            };
-            if self.is_connected_to(addr) {
-                continue;
+        }
+
+        while self.automatic_count() < self.config.max_outbound {
+            let in_use = self.addresses_in_use();
+            let groups = self.groups_in_use();
+            let bans = &self.bans;
+            let selected = self
+                .addrman
+                .select(false, now, &in_use, &groups, |ip| bans.is_blocked(ip, now));
+            match selected {
+                Some(addr) => self.connect_to(addr, ConnectionKind::Automatic),
+                None => break,
             }
-            let id = self.next_peer_id;
-            self.next_peer_id += 1;
-            self.connecting.insert(id, addr);
-            debug!("peer {id}: connecting to {addr}");
-            peer::spawn(
-                id,
-                addr,
-                self.headers.height(),
-                self.peer_ctx.clone(),
-                self.events_tx.clone(),
-            );
         }
     }
 
-    /// Looks up peer addresses again, at most once per `retry_interval_secs`.
-    async fn refill_candidates(&mut self) -> bool {
-        let retry = Duration::from_secs(self.config.retry_interval_secs);
-        if self.last_resolve.is_some_and(|t| t.elapsed() < retry) {
-            return false;
+    fn open_feeler(&mut self) {
+        let interval = Duration::from_secs(self.config.feeler_interval_secs);
+        if self.config.max_outbound == 0 || self.last_feeler.elapsed() < interval {
+            return;
         }
-        self.last_resolve = Some(Instant::now());
-        let lookup_timeout = Duration::from_secs(self.config.connect_timeout_secs);
-        let addrs = resolve_peers(self.chain, &self.config.peers, lookup_timeout).await;
-        if addrs.is_empty() {
-            warn!("no peer addresses found");
+        self.last_feeler = Instant::now();
+
+        let now = unix_now();
+        let in_use = self.addresses_in_use();
+        let bans = &self.bans;
+        // Feelers ignore group diversity: they exist to test addresses, not to sync.
+        let selected = self
+            .addrman
+            .select(true, now, &in_use, &HashSet::new(), |ip| {
+                bans.is_blocked(ip, now)
+            });
+        if let Some(addr) = selected {
+            debug!("feeler connection to {addr}");
+            self.connect_to(addr, ConnectionKind::Feeler);
         }
-        self.candidates.extend(addrs);
-        !self.candidates.is_empty()
     }
 
-    fn is_connected_to(&self, addr: SocketAddr) -> bool {
-        self.connecting.values().any(|a| *a == addr)
-            || self.peers.values().any(|p| p.info.addr == addr)
+    fn connect_to(&mut self, addr: SocketAddr, kind: ConnectionKind) {
+        let id = self.next_peer_id;
+        self.next_peer_id += 1;
+        self.addrman.mark_attempt(addr, unix_now());
+        self.connecting.insert(id, Connecting { addr, kind });
+        debug!("peer {id}: connecting to {addr} ({kind:?})");
+        connection::spawn(id, addr, self.conn_config.clone(), self.events_tx.clone());
     }
 
     fn on_connected(
         &mut self,
         id: PeerId,
-        info: PeerInfo,
-        commands: mpsc::UnboundedSender<PeerCommand>,
+        transport: TransportKind,
+        commands: mpsc::Sender<ConnectionCommand>,
     ) {
-        self.connecting.remove(&id);
-        info!(
-            "peer {id}: connected to {} ({}, version {}, height {}, {})",
-            info.addr, info.user_agent, info.version, info.start_height, info.services
-        );
-        let peer = ConnectedPeer {
-            info,
+        let Some(Connecting { addr, kind }) = self.connecting.remove(&id) else {
+            return;
+        };
+        let now = Instant::now();
+        let peer = Peer {
+            addr,
+            kind,
+            transport,
+            permissions: self.permissions.for_peer(addr),
             commands,
+            phase: Phase::AwaitingVersion,
+            nonce: 0,
+            connected_at: now,
+            version: 0,
+            services: ServiceFlags::NONE,
+            user_agent: String::new(),
+            start_height: 0,
+            next_ping: now + Duration::from_secs(self.config.ping_interval_secs),
+            ping_sent: None,
+            latency: None,
+            addr_tokens: 1.0,
+            addr_tokens_updated: now,
             blocks_in_flight: 0,
             disconnecting: false,
         };
         self.peers.insert(id, peer);
-
-        if self.synced_height.is_none() && self.sync_peer.is_none() {
-            self.start_header_sync(id);
-        }
-        self.request_blocks();
+        self.order.push_back(id);
+        self.inbox.insert(id, VecDeque::new());
+        debug!("peer {id}: {transport} transport to {addr}, sending version");
+        self.send_version(id);
     }
 
-    fn on_disconnected(&mut self, id: PeerId, reason: &str) {
-        if let Some(addr) = self.connecting.remove(&id) {
+    fn on_closed(&mut self, id: PeerId, reason: &str) {
+        if let Some(Connecting { addr, .. }) = self.connecting.remove(&id) {
+            self.addrman.mark_failed(addr, unix_now());
             debug!("peer {id}: could not connect to {addr}: {reason}");
             return;
         }
         let Some(peer) = self.peers.remove(&id) else {
             return;
         };
-        info!("peer {id}: disconnected from {}: {reason}", peer.info.addr);
+        self.order.retain(|other| *other != id);
+        self.inbox.remove(&id);
+        if peer.phase != Phase::Ready {
+            self.addrman.mark_failed(peer.addr, unix_now());
+        }
+        info!("peer {id}: disconnected from {}: {reason}", peer.addr);
 
         self.requeue_requests_from(id);
         for peers in self.not_found.values_mut() {
@@ -237,359 +402,201 @@ impl Manager {
         if self.sync_peer == Some(id) {
             self.sync_peer = None;
             self.sync_requested_at = None;
-            let next = self.peers.keys().min().copied();
+            let next = self
+                .peers
+                .iter()
+                .find(|(_, p)| p.is_ready())
+                .map(|(id, _)| *id);
             if let (None, Some(next)) = (self.synced_height, next) {
                 self.start_header_sync(next);
             }
         }
         self.request_blocks();
+        self.fill_connections();
     }
 
-    fn send(&self, id: PeerId, message: NetworkMessage) {
-        if let Some(peer) = self.peers.get(&id) {
-            let _ = peer.commands.send(PeerCommand::Send(message));
+    fn check_handshake_timeouts(&mut self) {
+        let limit = Duration::from_secs(self.config.handshake_timeout_secs);
+        let stuck: Vec<PeerId> = self
+            .peers
+            .iter()
+            .filter(|(_, p)| p.phase != Phase::Ready && p.connected_at.elapsed() > limit)
+            .map(|(id, _)| *id)
+            .collect();
+        for id in stuck {
+            self.disconnect(id, "handshake timed out");
         }
     }
 
-    fn disconnect(&mut self, id: PeerId, reason: impl Into<String>) {
+    // Peer helpers used by the protocol and sync code
+
+    pub(super) fn send(&mut self, id: PeerId, message: NetworkMessage) {
+        let Some(peer) = self.peers.get(&id) else {
+            return;
+        };
+        match peer.commands.try_send(ConnectionCommand::Send(message)) {
+            Ok(()) => {}
+            // Bitcoin Core pauses processing for a slow peer; we drop it instead.
+            Err(TrySendError::Full(_)) => self.disconnect(id, "send queue is full"),
+            Err(TrySendError::Closed(_)) => {}
+        }
+    }
+
+    pub(super) fn disconnect(&mut self, id: PeerId, reason: impl Into<String>) {
+        let reason = reason.into();
         if let Some(peer) = self.peers.get_mut(&id) {
             peer.disconnecting = true;
-            let _ = peer.commands.send(PeerCommand::Disconnect(reason.into()));
+            let _ = peer
+                .commands
+                .try_send(ConnectionCommand::Disconnect(reason));
         }
     }
 
-    // Headers
-
-    fn start_header_sync(&mut self, id: PeerId) {
-        info!(
-            "peer {id}: syncing headers from height {}",
-            self.headers.height()
-        );
-        self.sync_peer = Some(id);
-        self.request_headers(id);
-    }
-
-    fn request_headers(&mut self, id: PeerId) {
-        let message = GetHeadersMessage::new(self.headers.locator(), BlockHash::all_zeros());
-        self.send(id, NetworkMessage::GetHeaders(message));
-        if self.sync_peer == Some(id) && self.synced_height.is_none() {
-            self.sync_requested_at = Some(Instant::now());
-        }
-    }
-
-    async fn on_message(&mut self, id: PeerId, message: NetworkMessage) -> Result<(), P2pError> {
-        match message {
-            NetworkMessage::Headers(headers) => self.on_headers(id, headers).await?,
-            NetworkMessage::Block(block) => self.on_block(id, block).await?,
-            NetworkMessage::Inv(items) => self.on_inv(id, &items),
-            NetworkMessage::NotFound(items) => self.on_not_found(id, &items),
-            _ => {}
-        }
-        Ok(())
-    }
-
-    async fn on_headers(&mut self, id: PeerId, headers: Vec<Header>) -> Result<(), P2pError> {
-        if headers.len() > MAX_HEADERS {
-            let reason = format!("sent {} headers, limit is {MAX_HEADERS}", headers.len());
-            self.disconnect(id, reason);
-            return Ok(());
-        }
-        let full = headers.len() == MAX_HEADERS;
-        if self.sync_peer == Some(id) {
-            self.sync_requested_at = None;
-        }
-
-        let new = match self.headers.accept(&headers) {
-            Ok(new) => new,
-            Err(HeaderError::UnknownParent(_)) => {
-                // We lack the ancestors, e.g. after missing an announcement. During initial
-                // sync the sync peer fills the gap, so only ask once synced.
-                if self.synced_height.is_some() {
-                    self.request_headers(id);
-                }
-                return Ok(());
-            }
-            Err(err) => {
-                warn!("peer {id}: invalid headers: {err}");
-                self.disconnect(id, err.to_string());
-                return Ok(());
-            }
-        };
-
-        if !new.is_empty() {
-            let store = self.storage.headers();
-            let entries = new.clone();
-            blocking(move || store.put_many(&entries)).await?;
-        }
-
-        if self.synced_height.is_some() {
-            for entry in &new {
-                let hash = entry.block_hash();
-                if self.headers.is_on_best_chain(&hash) {
-                    info!("peer {id}: new header {hash} at height {}", entry.height);
-                }
-            }
-            self.queue_missing_blocks();
-            if full {
-                self.request_headers(id);
-            }
-            self.request_blocks();
-        } else if self.sync_peer == Some(id) {
-            if full {
-                info!("headers synced to height {}", self.headers.height());
-                self.request_headers(id);
-            } else {
-                self.synced_height = Some(self.headers.height());
-                info!(
-                    "header sync complete at height {}, tip {}; waiting for new blocks",
-                    self.headers.height(),
-                    self.headers.tip().block_hash()
-                );
-            }
-        }
-        Ok(())
-    }
-
-    fn on_inv(&mut self, id: PeerId, items: &[Inventory]) {
-        if self.synced_height.is_none() {
-            return;
-        }
-        let unknown_block = items.iter().any(|item| match item {
-            Inventory::Block(hash)
-            | Inventory::WitnessBlock(hash)
-            | Inventory::CompactBlock(hash) => !self.headers.contains(hash),
-            _ => false,
-        });
-        // Bitcoin Core does the same: an unknown block announcement triggers `getheaders`.
-        if unknown_block {
-            self.request_headers(id);
-        }
-    }
-
-    // Blocks
-
-    /// Queues best-chain blocks above the sync height that are not stored yet.
-    ///
-    /// Walking back from the tip also covers reorgs: blocks of the new branch that arrived
-    /// earlier, while that branch was not the best chain, get queued too.
-    fn queue_missing_blocks(&mut self) {
-        let Some(floor) = self.synced_height else {
+    /// One strike, as in Bitcoin Core: the peer is dropped and its address avoided.
+    pub(super) fn misbehaving(&mut self, id: PeerId, reason: impl Into<String>) {
+        let reason = reason.into();
+        let Some(peer) = self.peers.get(&id) else {
             return;
         };
-        let mut missing = Vec::new();
-        let mut entry = self.headers.tip();
-        while entry.height > floor && !entry.status.contains(BlockStatus::HAVE_DATA) {
-            let hash = entry.block_hash();
-            if !self.in_flight.contains_key(&hash) && !self.wanted_blocks.contains(&hash) {
-                missing.push(hash);
-            }
-            match self.headers.get(&entry.header.prev_blockhash) {
-                Some(parent) => entry = parent,
-                None => break,
-            }
+        let addr = peer.addr;
+        if peer.permissions.contains(Permissions::NO_BAN) {
+            warn!("peer {id} at {addr} misbehaved ({reason}), but has the noban permission");
+            return;
         }
-        self.wanted_blocks.extend(missing.into_iter().rev());
+        warn!("peer {id} at {addr} misbehaved: {reason}");
+        self.bans.discourage(addr.ip(), unix_now());
+        self.disconnect(id, reason);
     }
 
-    /// Sends `getdata` for queued blocks to the least busy peers.
-    fn request_blocks(&mut self) {
-        let mut waiting = VecDeque::new();
-        while let Some(hash) = self.wanted_blocks.pop_front() {
-            let stored = self
-                .headers
-                .get(&hash)
-                .is_some_and(|e| e.status.contains(BlockStatus::HAVE_DATA));
-            if stored || self.in_flight.contains_key(&hash) {
-                continue;
-            }
-            let Some(peer_id) = self.pick_peer(self.not_found.get(&hash)) else {
-                waiting.push_back(hash);
-                continue;
-            };
-
-            // The witness variant; a plain block request returns the block without witnesses.
-            let request = NetworkMessage::GetData(vec![Inventory::WitnessBlock(hash)]);
-            self.send(peer_id, request);
-            if let Some(peer) = self.peers.get_mut(&peer_id) {
-                peer.blocks_in_flight += 1;
-            }
-            let request = BlockRequest {
-                peer: peer_id,
-                since: Instant::now(),
-            };
-            self.in_flight.insert(hash, request);
-            debug!("peer {peer_id}: requested block {hash}");
-        }
-        self.wanted_blocks = waiting;
-    }
-
-    fn pick_peer(&self, excluded: Option<&HashSet<PeerId>>) -> Option<PeerId> {
-        self.peers
-            .iter()
-            .filter(|(id, p)| {
-                !p.disconnecting
-                    && p.blocks_in_flight < MAX_BLOCKS_IN_FLIGHT_PER_PEER
-                    && !excluded.is_some_and(|ex| ex.contains(id))
-            })
-            .min_by_key(|(id, p)| (p.blocks_in_flight, **id))
-            .map(|(id, _)| *id)
-    }
-
-    async fn on_block(&mut self, id: PeerId, block: Block) -> Result<(), P2pError> {
-        let hash = block.block_hash();
-        if !self.in_flight.get(&hash).is_some_and(|r| r.peer == id) {
-            debug!("peer {id}: ignoring unrequested block {hash}");
-            return Ok(());
-        }
-        self.finish_request(&hash);
-
-        if let Err(reason) = check_block_body(&block) {
-            warn!("peer {id}: block {hash} rejected: {reason}");
-            self.disconnect(id, format!("sent block {hash} that {reason}"));
-            self.wanted_blocks.push_front(hash);
-            self.request_blocks();
-            return Ok(());
-        }
-
-        let Some(entry) = self.headers.mark_have_data(&hash) else {
-            return Ok(());
-        };
-        self.not_found.remove(&hash);
-        let (height, transactions, size) = (entry.height, block.txdata.len(), block.total_size());
-
-        let blocks = self.storage.blocks();
-        let headers = self.storage.headers();
-        blocking(move || {
-            blocks.put(&block)?;
-            headers.put(&entry)
-        })
-        .await?;
-
-        info!(
-            "peer {id}: stored block {hash} at height {height}, {transactions} transactions, {size} bytes"
-        );
-        self.request_blocks();
-        Ok(())
-    }
-
-    fn on_not_found(&mut self, id: PeerId, items: &[Inventory]) {
-        for item in items {
-            let (Inventory::Block(hash) | Inventory::WitnessBlock(hash)) = item else {
-                continue;
-            };
-            if !self.in_flight.get(hash).is_some_and(|r| r.peer == id) {
-                continue;
-            }
-            self.finish_request(hash);
-            self.not_found.entry(*hash).or_default().insert(id);
-            self.wanted_blocks.push_front(*hash);
-        }
-        self.request_blocks();
-    }
-
-    fn finish_request(&mut self, hash: &BlockHash) {
-        if let Some(request) = self.in_flight.remove(hash)
-            && let Some(peer) = self.peers.get_mut(&request.peer)
-        {
-            peer.blocks_in_flight = peer.blocks_in_flight.saturating_sub(1);
-        }
-    }
-
-    fn requeue_requests_from(&mut self, id: PeerId) {
-        let hashes: Vec<BlockHash> = self
-            .in_flight
-            .iter()
-            .filter(|(_, r)| r.peer == id)
-            .map(|(hash, _)| *hash)
-            .collect();
-        for hash in hashes {
-            self.finish_request(&hash);
-            self.wanted_blocks.push_front(hash);
-        }
-    }
-
-    /// Disconnects peers that did not answer a header or block request in time.
-    fn expire_requests(&mut self) {
-        let limit = Duration::from_secs(self.config.request_timeout_secs);
-
-        if let (Some(id), Some(since)) = (self.sync_peer, self.sync_requested_at)
-            && since.elapsed() > limit
-        {
-            warn!("peer {id}: stalled during header sync");
-            self.sync_requested_at = None;
-            self.disconnect(id, "stalled during header sync");
-        }
-
-        let stalled: HashSet<PeerId> = self
-            .in_flight
+    fn automatic_count(&self) -> usize {
+        let connecting = self
+            .connecting
             .values()
-            .filter(|r| r.since.elapsed() > limit)
-            .map(|r| r.peer)
+            .filter(|c| c.kind == ConnectionKind::Automatic)
+            .count();
+        let connected = self
+            .peers
+            .values()
+            .filter(|p| p.kind == ConnectionKind::Automatic && !p.disconnecting)
+            .count();
+        connecting + connected
+    }
+
+    fn is_connected_to(&self, addr: SocketAddr) -> bool {
+        self.connecting.values().any(|c| c.addr == addr)
+            || self.peers.values().any(|p| p.addr == addr)
+    }
+
+    fn addresses_in_use(&self) -> HashSet<SocketAddr> {
+        self.connecting
+            .values()
+            .map(|c| c.addr)
+            .chain(self.peers.values().map(|p| p.addr))
+            .collect()
+    }
+
+    /// Network groups of automatic connections, so we spread across the network.
+    fn groups_in_use(&self) -> HashSet<Group> {
+        self.connecting
+            .values()
+            .filter(|c| c.kind == ConnectionKind::Automatic)
+            .map(|c| group_of(c.addr.ip()))
+            .chain(
+                self.peers
+                    .values()
+                    .filter(|p| p.kind == ConnectionKind::Automatic)
+                    .map(|p| group_of(p.addr.ip())),
+            )
+            .collect()
+    }
+
+    // Address discovery
+
+    async fn resolve_manual_peers(&mut self) {
+        let port = self.chain.default_port();
+        let hosts: Vec<String> = self
+            .config
+            .peers
+            .iter()
+            .map(|peer| with_default_port(peer, port))
             .collect();
-        for id in stalled {
-            warn!("peer {id}: stalled on block download");
-            self.disconnect(id, "stalled on block download");
-            self.requeue_requests_from(id);
+        let lookup_timeout = Duration::from_secs(self.config.connect_timeout_secs);
+        self.manual_addrs = resolve_hosts(&hosts, lookup_timeout).await;
+        let now = unix_now();
+        for addr in self.manual_addrs.clone() {
+            self.addrman.add(addr, 0, now);
         }
-        self.request_blocks();
     }
-}
 
-/// Checks that a block body matches its header and still carries its witness data, so a
-/// peer cannot hand us a different or stripped block. Full validation comes later.
-fn check_block_body(block: &Block) -> Result<(), &'static str> {
-    if !block.check_merkle_root() {
-        return Err("does not match its header's merkle root");
+    fn wants_more_addresses(&self) -> bool {
+        self.config.use_dns_seeds
+            && self.addrman.len() < MIN_ADDRESSES
+            && self.automatic_count() < self.config.max_outbound
     }
-    if !block.check_witness_commitment() {
-        return Err("does not match its witness commitment");
-    }
-    if is_witness_stripped(block) {
-        return Err("is missing its witness data");
-    }
-    Ok(())
-}
 
-/// A block that commits to witness data must carry the 32-byte witness reserved value in its
-/// coinbase. Without it, the witnesses were stripped. Mirrors Bitcoin Core's
-/// `CheckWitnessMalleation`.
-fn is_witness_stripped(block: &Block) -> bool {
-    let Some(coinbase) = block.txdata.first() else {
-        return false;
-    };
-    let has_commitment = coinbase.output.iter().any(|output| {
-        output
-            .script_pubkey
-            .as_bytes()
-            .starts_with(&WITNESS_COMMITMENT_PREFIX)
-    });
-    let has_reserved_value = coinbase.input.first().is_some_and(|input| {
-        input.witness.len() == 1 && input.witness.nth(0).is_some_and(|item| item.len() == 32)
-    });
-    has_commitment && !has_reserved_value
-}
+    /// Fills the address book from the chain's DNS seeds, at most once per retry interval.
+    async fn seed_addresses(&mut self) {
+        if !self.config.use_dns_seeds || self.chain.dns_seeds().is_empty() {
+            return;
+        }
+        let retry = Duration::from_secs(self.config.retry_interval_secs);
+        if self.last_lookup.is_some_and(|at| at.elapsed() < retry) {
+            return;
+        }
+        self.last_lookup = Some(Instant::now());
 
-/// Resolves the configured peers, or the chain's DNS seeds when none are configured.
-/// Addresses from different hosts are interleaved so connections spread across sources.
-async fn resolve_peers(
-    chain: Chain,
-    peers: &[String],
-    lookup_timeout: Duration,
-) -> Vec<SocketAddr> {
-    let port = chain.default_port();
-    let hosts: Vec<String> = if peers.is_empty() {
-        chain
+        let port = self.chain.default_port();
+        let hosts: Vec<String> = self
+            .chain
             .dns_seeds()
             .iter()
             .map(|seed| format!("{seed}:{port}"))
-            .collect()
-    } else {
-        peers
-            .iter()
-            .map(|peer| with_default_port(peer, port))
-            .collect()
-    };
+            .collect();
+        let lookup_timeout = Duration::from_secs(self.config.connect_timeout_secs);
+        let addrs = resolve_hosts(&hosts, lookup_timeout).await;
 
+        let now = unix_now();
+        let added = addrs
+            .into_iter()
+            .filter(|addr| self.addrman.add(*addr, 0, now))
+            .count();
+        if added > 0 {
+            info!(
+                "added {added} addresses from DNS seeds, {} known",
+                self.addrman.len()
+            );
+        }
+    }
+
+    /// Writes address book and ban changes to the database.
+    async fn save_network_state(&mut self) -> Result<(), P2pError> {
+        let addresses = self.addrman.take_dirty();
+        let dropped = self.addrman.take_removed();
+        let bans = self.bans.take_dirty();
+        let unbanned = self.bans.take_removed();
+        if addresses.is_empty() && dropped.is_empty() && bans.is_empty() && unbanned.is_empty() {
+            return Ok(());
+        }
+
+        let address_store = self.storage.addresses();
+        let ban_store = self.storage.bans();
+        blocking(move || {
+            address_store.put_many(&addresses)?;
+            address_store.delete_many(&dropped)?;
+            for ban in &bans {
+                ban_store.put(ban)?;
+            }
+            for subnet in &unbanned {
+                ban_store.delete(subnet)?;
+            }
+            Ok(())
+        })
+        .await
+    }
+}
+
+/// Resolves hosts, interleaving results so connections spread across sources.
+async fn resolve_hosts(hosts: &[String], lookup_timeout: Duration) -> Vec<SocketAddr> {
     let mut per_host = Vec::new();
     for host in hosts {
         match timeout(lookup_timeout, lookup_host(host.as_str())).await {
@@ -613,8 +620,9 @@ async fn resolve_peers(
     result
 }
 
-/// Appends the chain's default port unless `peer` already names one.
-fn with_default_port(peer: &str, port: u16) -> String {
+/// Appends the chain's default port unless the peer already names one.
+pub(super) fn with_default_port(peer: &str, port: u16) -> String {
+    use std::net::Ipv6Addr;
     if peer.parse::<SocketAddr>().is_ok() {
         return peer.to_string();
     }
@@ -631,11 +639,17 @@ fn with_default_port(peer: &str, port: u16) -> String {
     }
 }
 
+pub(super) fn unix_now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64)
+}
+
 /// Runs synchronous storage work on tokio's blocking pool.
-async fn blocking<T, F>(f: F) -> Result<T, P2pError>
+pub(super) async fn blocking<T, F>(f: F) -> Result<T, P2pError>
 where
     T: Send + 'static,
-    F: FnOnce() -> Result<T, StorageError> + Send + 'static,
+    F: FnOnce() -> Result<T, crate::storage::StorageError> + Send + 'static,
 {
     Ok(tokio::task::spawn_blocking(f).await??)
 }
@@ -643,8 +657,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitcoin::blockdata::constants::genesis_block;
-    use bitcoin::{Network, Witness};
 
     #[test]
     fn default_ports_are_added_only_when_missing() {
@@ -657,95 +669,5 @@ mod tests {
         );
         assert_eq!(with_default_port("::1", 8333), "[::1]:8333");
         assert_eq!(with_default_port("[::1]:9000", 8333), "[::1]:9000");
-    }
-
-    #[test]
-    fn genesis_block_body_is_accepted() {
-        assert_eq!(check_block_body(&genesis_block(Network::Bitcoin)), Ok(()));
-    }
-
-    #[test]
-    fn detects_blocks_that_do_not_match_their_header() {
-        let mut block = genesis_block(Network::Bitcoin);
-        block.txdata[0].output[0].value = bitcoin::Amount::from_sat(1);
-        assert!(check_block_body(&block).is_err());
-    }
-
-    /// A block with one SegWit spend and a valid witness commitment.
-    fn segwit_block() -> Block {
-        use bitcoin::transaction::Version;
-        use bitcoin::{Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid};
-
-        let input = |previous_output, script_sig: Vec<u8>, witness: Witness| TxIn {
-            previous_output,
-            script_sig: ScriptBuf::from_bytes(script_sig),
-            sequence: Sequence::MAX,
-            witness,
-        };
-        let tx = |input: TxIn, value| Transaction {
-            version: Version::TWO,
-            lock_time: bitcoin::absolute::LockTime::ZERO,
-            input: vec![input],
-            output: vec![TxOut {
-                value: Amount::from_sat(value),
-                script_pubkey: ScriptBuf::new(),
-            }],
-        };
-        let reserved = [0u8; 32];
-        let coinbase = tx(
-            input(
-                OutPoint::null(),
-                vec![1, 1],
-                Witness::from_slice(&[reserved]),
-            ),
-            50_0000_0000,
-        );
-        let spend_from = OutPoint {
-            txid: Txid::all_zeros(),
-            vout: 0,
-        };
-        let spend = tx(
-            input(spend_from, vec![], Witness::from_slice(&[[7u8; 72]])),
-            1_000,
-        );
-
-        let mut block = Block {
-            header: genesis_block(Network::Regtest).header,
-            txdata: vec![coinbase, spend],
-        };
-        let witness_root = block.witness_root().unwrap();
-        let commitment = Block::compute_witness_commitment(&witness_root, &reserved);
-        let mut script = WITNESS_COMMITMENT_PREFIX.to_vec();
-        script.extend_from_slice(commitment.as_byte_array());
-        block.txdata[0].output.push(bitcoin::TxOut {
-            value: bitcoin::Amount::ZERO,
-            script_pubkey: bitcoin::ScriptBuf::from_bytes(script),
-        });
-        block.header.merkle_root = block.compute_merkle_root().unwrap();
-        block
-    }
-
-    #[test]
-    fn detects_stripped_witness_data() {
-        let block = segwit_block();
-        assert_eq!(check_block_body(&block), Ok(()));
-
-        let mut stripped = block.clone();
-        for tx in &mut stripped.txdata {
-            for input in &mut tx.input {
-                input.witness = Witness::new();
-            }
-        }
-        assert_eq!(
-            check_block_body(&stripped),
-            Err("is missing its witness data")
-        );
-
-        let mut wrong_witness = block;
-        wrong_witness.txdata[1].input[0].witness = Witness::from_slice(&[[8u8; 72]]);
-        assert_eq!(
-            check_block_body(&wrong_witness),
-            Err("does not match its witness commitment")
-        );
     }
 }

@@ -5,6 +5,7 @@ mod error;
 mod header_chain;
 mod p2p;
 mod storage;
+mod validation;
 
 use std::io::IsTerminal;
 use std::process::ExitCode;

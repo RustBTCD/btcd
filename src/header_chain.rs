@@ -9,10 +9,11 @@ use std::collections::HashMap;
 use bitcoin::block::Header;
 use bitcoin::blockdata::constants::genesis_block;
 use bitcoin::consensus::params::Params;
-use bitcoin::pow::{Target, Work};
+use bitcoin::pow::Target;
 use bitcoin::{BlockHash, Network};
 
 use crate::storage::{BlockStatus, HeaderEntry};
+use crate::validation::{self, ValidationError};
 
 #[derive(Debug, PartialEq, Eq, thiserror::Error)]
 pub enum HeaderError {
@@ -30,6 +31,12 @@ pub enum HeaderError {
 
     #[error("stored headers belong to another chain: genesis {0} is missing")]
     ForeignChain(BlockHash),
+
+    #[error("header {hash} is invalid: {source}")]
+    Invalid {
+        hash: BlockHash,
+        source: ValidationError,
+    },
 }
 
 pub struct HeaderChain {
@@ -124,24 +131,21 @@ impl HeaderChain {
     /// Either every header is accepted or none is. Returns the entries that were not known
     /// before, in message order, so the caller can persist them.
     pub fn accept(&mut self, headers: &[Header]) -> Result<Vec<HeaderEntry>, HeaderError> {
-        let mut new = Vec::new();
-        let mut prev: Option<(BlockHash, u32, Work)> = None;
+        let mut new: Vec<HeaderEntry> = Vec::new();
+        let mut prev: Option<HeaderEntry> = None;
 
         for header in headers {
             let hash = header.block_hash();
-            let (parent_height, parent_work) = match prev {
-                Some((prev_hash, height, work)) if header.prev_blockhash == prev_hash => {
-                    (height, work)
-                }
+            let parent = match &prev {
+                Some(entry) if header.prev_blockhash == entry.block_hash() => entry.clone(),
                 Some(_) => return Err(HeaderError::NotContinuous(hash)),
-                None => {
-                    let parent = self
-                        .entries
-                        .get(&header.prev_blockhash)
-                        .ok_or(HeaderError::UnknownParent(hash))?;
-                    (parent.height, parent.chain_work)
-                }
+                None => self
+                    .entries
+                    .get(&header.prev_blockhash)
+                    .ok_or(HeaderError::UnknownParent(hash))?
+                    .clone(),
             };
+            let (parent_height, parent_work) = (parent.height, parent.chain_work);
 
             let (height, chain_work) = match self.entries.get(&hash) {
                 Some(known) => (known.height, known.chain_work),
@@ -153,12 +157,20 @@ impl HeaderChain {
                         chain_work: parent_work + header.work(),
                         status: BlockStatus::default(),
                     };
+                    // TODO: the contextual rules land with the consensus module.
+                    validation::check_header(header, &parent)
+                        .map_err(|source| HeaderError::Invalid { hash, source })?;
                     let key = (entry.height, entry.chain_work);
                     new.push(entry);
                     key
                 }
             };
-            prev = Some((hash, height, chain_work));
+            prev = Some(HeaderEntry {
+                header: *header,
+                height,
+                chain_work,
+                status: BlockStatus::default(),
+            });
         }
 
         for entry in &new {
