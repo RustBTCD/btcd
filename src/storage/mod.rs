@@ -148,12 +148,13 @@ pub(crate) mod test_utils {
     use std::path::Path;
 
     use super::{Storage, StorageConfig};
-    use bitcoin::block::{Header, Version as BlockVersion};
+    use bitcoin::block::{Checked, Header, Version as BlockVersion};
     use bitcoin::hashes::Hash;
     use bitcoin::transaction::Version as TxVersion;
     use bitcoin::{
-        Amount, Block, BlockHash, CompactTarget, OutPoint, ScriptBuf, Sequence, Transaction, TxIn,
-        TxMerkleNode, TxOut, Witness, absolute::LockTime,
+        Amount, Block, BlockHash, BlockTime, CompactTarget, OutPoint, ScriptPubKeyBuf,
+        ScriptSigBuf, Sequence, Transaction, TxIn, TxMerkleNode, TxOut, Witness,
+        absolute::LockTime,
     };
 
     pub fn open_at(path: &Path) -> Storage {
@@ -172,53 +173,56 @@ pub(crate) mod test_utils {
 
     pub fn output(sats: u64) -> TxOut {
         TxOut {
-            value: Amount::from_sat(sats),
-            script_pubkey: ScriptBuf::from_bytes(vec![0x51]),
+            amount: Amount::from_sat(sats).expect("amount is in range"),
+            script_pubkey: ScriptPubKeyBuf::from_bytes(vec![0x51]),
         }
     }
 
     /// `tag` makes otherwise identical coinbases have different txids.
     pub fn coinbase(tag: u8, outputs: Vec<TxOut>) -> Transaction {
-        tx(vec![(OutPoint::null(), vec![tag, tag])], outputs)
+        tx(vec![(OutPoint::COINBASE_PREVOUT, vec![tag, tag])], outputs)
     }
 
     pub fn spend(prevouts: &[OutPoint], outputs: Vec<TxOut>) -> Transaction {
         tx(prevouts.iter().map(|p| (*p, vec![])).collect(), outputs)
     }
 
-    fn tx(inputs: Vec<(OutPoint, Vec<u8>)>, output: Vec<TxOut>) -> Transaction {
+    fn tx(inputs: Vec<(OutPoint, Vec<u8>)>, outputs: Vec<TxOut>) -> Transaction {
         Transaction {
             version: TxVersion::TWO,
             lock_time: LockTime::ZERO,
-            input: inputs
+            inputs: inputs
                 .into_iter()
                 .map(|(previous_output, sig)| TxIn {
                     previous_output,
-                    script_sig: ScriptBuf::from_bytes(sig),
+                    script_sig: ScriptSigBuf::from_bytes(sig),
                     sequence: Sequence::MAX,
                     witness: Witness::new(),
                 })
                 .collect(),
-            output,
+            outputs,
         }
     }
 
-    pub fn block(prev: BlockHash, nonce: u32, txdata: Vec<Transaction>) -> Block {
-        Block {
-            header: Header {
-                version: BlockVersion::ONE,
-                prev_blockhash: prev,
-                merkle_root: TxMerkleNode::all_zeros(),
-                time: 0,
-                bits: CompactTarget::from_consensus(0x207f_ffff),
-                nonce,
-            },
-            txdata,
-        }
+    pub fn block(prev: BlockHash, nonce: u32, transactions: Vec<Transaction>) -> Block {
+        let header = Header {
+            version: BlockVersion::ONE,
+            prev_blockhash: prev,
+            merkle_root: TxMerkleNode::from_byte_array([0; 32]),
+            time: BlockTime::from_u32(0),
+            bits: CompactTarget::from_consensus(0x207f_ffff),
+            nonce,
+        };
+        Block::new_unchecked(header, transactions)
+    }
+
+    /// Blocks reach the chain store only after validation, which is what the type says.
+    pub fn checked(block: &Block) -> Block<Checked> {
+        block.clone().assume_checked(None)
     }
 
     pub fn null_hash() -> BlockHash {
-        BlockHash::all_zeros()
+        BlockHash::from_byte_array([0; 32])
     }
 }
 

@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-# Stay on the 0.32.x line; 0.33 is a beta with the crate split in progress.
-bitcoin = { version = "0.32", features = ["std", "rand-std"] }
+# Pinned to a rust-bitcoin commit: the peer-to-peer message crate is not published yet, and
+# its types must come from the same source as the consensus types to be the same types.
+bitcoin = { git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "1215f94a6cbf33b418da5b959f2a61c5c5b83e01", features = ["std"] }
+p2p = { package = "bitcoin-p2p-messages", git = "https://github.com/rust-bitcoin/rust-bitcoin", rev = "1215f94a6cbf33b418da5b959f2a61c5c5b83e01", features = ["std"] }
 # Script verification via Bitcoin Core's C++ code. Disabled until script checks are wired in:
 # it builds all of Bitcoin Core with cmake on every clean build.
 # bitcoinkernel = "0.3"

@@ -2,6 +2,7 @@ mod block;
 mod config;
 mod error;
 mod storage;
+mod wire;
 
 use std::process::ExitCode;
 

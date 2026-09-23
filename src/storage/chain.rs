@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
+use bitcoin::block::Checked;
 use bitcoin::hashes::Hash;
 use bitcoin::{Block, BlockHash, OutPoint, TxIn};
 use rocksdb::{DB, WriteBatch};
@@ -68,11 +69,11 @@ impl ChainStore {
     ///
     /// Within the batch, new outputs are written before spent ones are deleted, so an output
     /// created and spent inside the same block ends up absent from the UTXO set.
-    pub fn connect_block(&self, block: &Block, height: u32, spent: &[Coin]) -> Result<()> {
+    pub fn connect_block(&self, block: &Block<Checked>, height: u32, spent: &[Coin]) -> Result<()> {
         let _guard = self.lock_writes();
         let hash = block.block_hash();
         let tip = self.tip()?;
-        if tip.unwrap_or_else(BlockHash::all_zeros) != block.header.prev_blockhash {
+        if tip.unwrap_or(BlockHash::from_byte_array([0; 32])) != block.header().prev_blockhash {
             return Err(StorageError::NotExtendingTip { block: hash, tip });
         }
         check_spent_count(block, spent.len())?;
@@ -80,10 +81,10 @@ impl ChainStore {
         let utxo = cf(&self.db, cf::UTXO)?;
         let mut batch = WriteBatch::default();
 
-        for tx in &block.txdata {
+        for tx in block.transactions() {
             let txid = tx.compute_txid();
             let is_coinbase = tx.is_coinbase();
-            for (vout, output) in tx.output.iter().enumerate() {
+            for (vout, output) in tx.outputs.iter().enumerate() {
                 if Coin::is_unspendable(output) {
                     continue;
                 }
@@ -118,7 +119,7 @@ impl ChainStore {
     ///
     /// Spent coins are restored before created outputs are deleted, so an output created and
     /// spent inside the same block ends up absent from the UTXO set.
-    pub fn disconnect_block(&self, block: &Block, height: u32) -> Result<()> {
+    pub fn disconnect_block(&self, block: &Block<Checked>, height: u32) -> Result<()> {
         let _guard = self.lock_writes();
         let hash = block.block_hash();
         let tip = self.tip()?;
@@ -139,10 +140,10 @@ impl ChainStore {
                 coin_bytes(&coin.output, coin.height, coin.is_coinbase),
             );
         }
-        for tx in &block.txdata {
+        for tx in block.transactions() {
             let txid = tx.compute_txid();
             // Unspendable outputs were never inserted; deleting a missing key is a no-op.
-            for vout in 0..tx.output.len() {
+            for vout in 0..tx.outputs.len() {
                 batch.delete_cf(
                     utxo,
                     outpoint_key(&OutPoint {
@@ -158,7 +159,7 @@ impl ChainStore {
         batch.put_cf(
             cf(&self.db, cf::META)?,
             meta_key::TIP,
-            block.header.prev_blockhash.as_byte_array(),
+            block.header().prev_blockhash.as_byte_array(),
         );
 
         self.db.write(batch)?;
@@ -167,11 +168,15 @@ impl ChainStore {
 }
 
 /// Inputs that spend existing coins: every input except the coinbase's.
-fn spending_inputs(block: &Block) -> impl Iterator<Item = &TxIn> {
-    block.txdata.iter().skip(1).flat_map(|tx| &tx.input)
+fn spending_inputs(block: &Block<Checked>) -> impl Iterator<Item = &TxIn> {
+    block
+        .transactions()
+        .iter()
+        .skip(1)
+        .flat_map(|tx| &tx.inputs)
 }
 
-fn check_spent_count(block: &Block, actual: usize) -> Result<()> {
+fn check_spent_count(block: &Block<Checked>, actual: usize) -> Result<()> {
     let expected = spending_inputs(block).count();
     if expected == actual {
         Ok(())
@@ -191,7 +196,7 @@ fn decode_hash(bytes: &[u8]) -> Result<BlockHash> {
 mod tests {
     use super::*;
     use crate::storage::test_utils::*;
-    use bitcoin::{Amount, ScriptBuf, TxOut};
+    use bitcoin::{Amount, ScriptPubKeyBuf, TxOut};
 
     fn op(tx: &bitcoin::Transaction, vout: u32) -> OutPoint {
         OutPoint {
@@ -208,12 +213,12 @@ mod tests {
 
         // Block 0: coinbase with two outputs and one OP_RETURN.
         let op_return = TxOut {
-            value: Amount::ZERO,
-            script_pubkey: ScriptBuf::from_bytes(vec![0x6a]),
+            amount: Amount::ZERO,
+            script_pubkey: ScriptPubKeyBuf::from_bytes(vec![0x6a]),
         };
         let cb0 = coinbase(0, vec![output(50), output(25), op_return]);
         let b0 = block(null_hash(), 0, vec![cb0.clone()]);
-        chain.connect_block(&b0, 0, &[]).unwrap();
+        chain.connect_block(&checked(&b0), 0, &[]).unwrap();
 
         assert_eq!(chain.tip().unwrap(), Some(b0.block_hash()));
         assert_eq!(chain.block_hash_at(0).unwrap(), Some(b0.block_hash()));
@@ -248,7 +253,7 @@ mod tests {
                 is_coinbase: false,
             },
         ];
-        chain.connect_block(&b1, 1, &spent).unwrap();
+        chain.connect_block(&checked(&b1), 1, &spent).unwrap();
 
         assert_eq!(chain.tip().unwrap(), Some(b1.block_hash()));
         assert!(utxos.get(&op(&cb0, 0)).unwrap().is_none());
@@ -264,7 +269,7 @@ mod tests {
         );
 
         // Disconnect block 1: state equals the state after block 0.
-        chain.disconnect_block(&b1, 1).unwrap();
+        chain.disconnect_block(&checked(&b1), 1).unwrap();
 
         assert_eq!(chain.tip().unwrap(), Some(b0.block_hash()));
         assert_eq!(chain.block_hash_at(1).unwrap(), None);
@@ -281,7 +286,10 @@ mod tests {
         let (_dir, storage) = open_temp();
         let cb = coinbase(0, vec![output(1), output(2), output(3)]);
         let b0 = block(null_hash(), 0, vec![cb.clone()]);
-        storage.chain().connect_block(&b0, 0, &[]).unwrap();
+        storage
+            .chain()
+            .connect_block(&checked(&b0), 0, &[])
+            .unwrap();
 
         let utxos = storage.utxos();
         let missing = OutPoint {
@@ -290,13 +298,13 @@ mod tests {
         };
         let found = utxos.get_many(&[op(&cb, 2), missing, op(&cb, 0)]).unwrap();
         assert_eq!(
-            found[0].as_ref().map(|c| c.output.value),
-            Some(Amount::from_sat(3))
+            found[0].as_ref().map(|c| c.output.amount),
+            Some(Amount::from_sat(3).unwrap())
         );
         assert!(found[1].is_none());
         assert_eq!(
-            found[2].as_ref().map(|c| c.output.value),
-            Some(Amount::from_sat(1))
+            found[2].as_ref().map(|c| c.output.amount),
+            Some(Amount::from_sat(1).unwrap())
         );
 
         assert!(utxos.has_unspent_outputs(&cb.compute_txid()).unwrap());
@@ -312,12 +320,12 @@ mod tests {
         let orphan = block(b0.block_hash(), 5, vec![coinbase(5, vec![output(1)])]);
 
         assert!(matches!(
-            chain.connect_block(&orphan, 1, &[]),
+            chain.connect_block(&checked(&orphan), 1, &[]),
             Err(StorageError::NotExtendingTip { .. })
         ));
-        chain.connect_block(&b0, 0, &[]).unwrap();
+        chain.connect_block(&checked(&b0), 0, &[]).unwrap();
         assert!(matches!(
-            chain.disconnect_block(&orphan, 1),
+            chain.disconnect_block(&checked(&orphan), 1),
             Err(StorageError::NotTip { .. })
         ));
     }
@@ -332,7 +340,7 @@ mod tests {
             vec![cb.clone(), spend(&[op(&cb, 0)], vec![output(1)])],
         );
         assert!(matches!(
-            storage.chain().connect_block(&b0, 0, &[]),
+            storage.chain().connect_block(&checked(&b0), 0, &[]),
             Err(StorageError::SpentCoinsMismatch {
                 expected: 1,
                 actual: 0
@@ -347,7 +355,10 @@ mod tests {
         let b0 = block(null_hash(), 0, vec![cb.clone()]);
         {
             let storage = open_at(dir.path());
-            storage.chain().connect_block(&b0, 0, &[]).unwrap();
+            storage
+                .chain()
+                .connect_block(&checked(&b0), 0, &[])
+                .unwrap();
         }
         let storage = open_at(dir.path());
         assert_eq!(storage.chain().tip().unwrap(), Some(b0.block_hash()));
@@ -358,7 +369,10 @@ mod tests {
     fn concurrent_connects_on_same_tip_admit_one() {
         let (_dir, storage) = open_temp();
         let b0 = block(null_hash(), 0, vec![coinbase(0, vec![output(1)])]);
-        storage.chain().connect_block(&b0, 0, &[]).unwrap();
+        storage
+            .chain()
+            .connect_block(&checked(&b0), 0, &[])
+            .unwrap();
 
         const THREADS: u8 = 8;
         let barrier = std::sync::Barrier::new(usize::from(THREADS));
@@ -374,7 +388,7 @@ mod tests {
                     );
                     s.spawn(move || {
                         barrier.wait();
-                        chain.connect_block(&b1, 1, &[]).is_ok()
+                        chain.connect_block(&checked(&b1), 1, &[]).is_ok()
                     })
                 })
                 .collect();

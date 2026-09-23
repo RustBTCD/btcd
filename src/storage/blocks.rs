@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use bitcoin::consensus::{deserialize, serialize};
+use bitcoin::encoding::{decode_from_slice, encode_to_vec};
 use bitcoin::hashes::Hash;
 use bitcoin::{Block, BlockHash};
 use rocksdb::DB;
@@ -24,7 +24,8 @@ impl BlockStore {
     pub fn put(&self, block: &Block) -> Result<BlockHash> {
         let hash = block.block_hash();
         let cf = cf(&self.db, cf::BLOCKS)?;
-        self.db.put_cf(cf, hash.as_byte_array(), serialize(block))?;
+        self.db
+            .put_cf(cf, hash.as_byte_array(), encode_to_vec(block))?;
         Ok(hash)
     }
 
@@ -32,7 +33,7 @@ impl BlockStore {
         let cf = cf(&self.db, cf::BLOCKS)?;
         self.db
             .get_pinned_cf(cf, hash.as_byte_array())?
-            .map(|bytes| deserialize(&bytes).map_err(|e| StorageError::corrupted("block", e)))
+            .map(|bytes| decode_from_slice(&bytes).map_err(|e| StorageError::corrupted("block", e)))
             .transpose()
     }
 

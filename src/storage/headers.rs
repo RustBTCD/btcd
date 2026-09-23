@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use bitcoin::BlockHash;
 use bitcoin::block::Header;
-use bitcoin::consensus::{deserialize, serialize};
+use bitcoin::encoding::{decode_from_slice, encode_to_vec};
 use bitcoin::hashes::Hash;
 use bitcoin::pow::Work;
 use rocksdb::{DB, IteratorMode, WriteBatch};
@@ -68,7 +68,7 @@ impl HeaderEntry {
     /// Layout: header (80 bytes) ‖ height (u32 LE) ‖ chain work (32 bytes BE) ‖ status (u8).
     pub fn to_bytes(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(ENTRY_LEN);
-        bytes.extend_from_slice(&serialize(&self.header));
+        bytes.extend_from_slice(&encode_to_vec(&self.header));
         bytes.extend_from_slice(&self.height.to_le_bytes());
         bytes.extend_from_slice(&self.chain_work.to_be_bytes());
         bytes.push(self.status.bits());
@@ -82,7 +82,7 @@ impl HeaderEntry {
                 format!("expected {ENTRY_LEN} bytes, got {}", bytes.len()),
             ));
         }
-        let header = deserialize::<Header>(&bytes[..HEADER_LEN])
+        let header = decode_from_slice::<Header>(&bytes[..HEADER_LEN])
             .map_err(|e| StorageError::corrupted("header entry", e))?;
         let height = &bytes[HEADER_LEN..HEIGHT_END];
         let chain_work = &bytes[HEIGHT_END..WORK_END];
@@ -143,10 +143,12 @@ impl HeaderStore {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bitcoin::ext::*;
+
     use crate::storage::test_utils::*;
 
     fn entry(nonce: u32, height: u32) -> HeaderEntry {
-        let header = block(null_hash(), nonce, vec![]).header;
+        let header = *checked(&block(null_hash(), nonce, vec![])).header();
         let mut status = BlockStatus::HEADER_VALID;
         status.insert(BlockStatus::HAVE_DATA);
         HeaderEntry {
