@@ -1,14 +1,13 @@
 use bitcoin::BlockHash;
 
-pub type Result<T> = std::result::Result<T, StorageError>;
+pub type Result<T> = std::result::Result<T, Error>;
 
 #[derive(Debug, thiserror::Error)]
-pub enum StorageError {
+pub enum Error {
+    /// The storage engine failed. The engine's own message is kept, but its type is not part
+    /// of this interface, so callers never depend on which engine is in use.
     #[error("database error: {0}")]
-    Db(#[from] rocksdb::Error),
-
-    #[error("column family `{0}` is missing")]
-    MissingColumnFamily(&'static str),
+    Engine(String),
 
     #[error("corrupted {what}: {reason}")]
     Corrupted { what: &'static str, reason: String },
@@ -32,7 +31,7 @@ pub enum StorageError {
     SpentCoinsMismatch { expected: usize, actual: usize },
 }
 
-impl StorageError {
+impl Error {
     pub(crate) fn corrupted(what: &'static str, reason: impl ToString) -> Self {
         Self::Corrupted {
             what,

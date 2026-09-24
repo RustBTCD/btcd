@@ -66,14 +66,14 @@ mod tests {
 
     #[test]
     fn partial_override_keeps_other_defaults() {
-        let config = Config::from_toml("[storage]\nblock_cache_mib = 1024\n").unwrap();
-        assert_eq!(config.storage.block_cache_mib, 1024);
+        let config = Config::from_toml("[storage.rocks]\nblock_cache_mib = 1024\n").unwrap();
+        assert_eq!(config.storage.rocks.block_cache_mib, 1024);
         assert_eq!(config.storage.path, StorageConfig::default().path);
     }
 
     #[test]
     fn unknown_keys_are_rejected() {
-        assert!(Config::from_toml("[storage]\nblock_cache = 1\n").is_err());
+        assert!(Config::from_toml("[storage.rocks]\nblock_cache = 1\n").is_err());
         assert!(Config::from_toml("[stroage]\n").is_err());
     }
 

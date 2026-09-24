@@ -1,13 +1,10 @@
-use std::sync::Arc;
-
 use bitcoin::BlockHash;
 use bitcoin::block::Header;
 use bitcoin::encoding::{decode_from_slice, encode_to_vec};
-use bitcoin::hashes::Hash;
 use bitcoin::pow::Work;
-use rocksdb::{DB, IteratorMode, WriteBatch};
 
-use super::{Result, StorageError, cf};
+use super::db::table::{Decode, Encode};
+use super::{Error, Result};
 
 /// Validation progress of a block, as bit flags.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -77,13 +74,13 @@ impl HeaderEntry {
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         if bytes.len() != ENTRY_LEN {
-            return Err(StorageError::corrupted(
+            return Err(Error::corrupted(
                 "header entry",
                 format!("expected {ENTRY_LEN} bytes, got {}", bytes.len()),
             ));
         }
         let header = decode_from_slice::<Header>(&bytes[..HEADER_LEN])
-            .map_err(|e| StorageError::corrupted("header entry", e))?;
+            .map_err(|e| Error::corrupted("header entry", e))?;
         let height = &bytes[HEADER_LEN..HEIGHT_END];
         let chain_work = &bytes[HEIGHT_END..WORK_END];
         Ok(HeaderEntry {
@@ -95,48 +92,15 @@ impl HeaderEntry {
     }
 }
 
-/// Every known header, on any branch, keyed by block hash.
-#[derive(Clone)]
-pub struct HeaderStore {
-    db: Arc<DB>,
+impl Encode for HeaderEntry {
+    fn encode(&self) -> Vec<u8> {
+        self.to_bytes()
+    }
 }
 
-impl HeaderStore {
-    pub(crate) fn new(db: Arc<DB>) -> Self {
-        Self { db }
-    }
-
-    pub fn get(&self, hash: &BlockHash) -> Result<Option<HeaderEntry>> {
-        let cf = cf(&self.db, cf::HEADERS)?;
-        self.db
-            .get_pinned_cf(cf, hash.as_byte_array())?
-            .map(|bytes| HeaderEntry::from_bytes(&bytes))
-            .transpose()
-    }
-
-    /// Inserts or overwrites one entry, e.g. to update its status.
-    pub fn put(&self, entry: &HeaderEntry) -> Result<()> {
-        self.put_many(std::slice::from_ref(entry))
-    }
-
-    /// Writes a batch of entries atomically, e.g. one `headers` message worth.
-    pub fn put_many(&self, entries: &[HeaderEntry]) -> Result<()> {
-        let cf = cf(&self.db, cf::HEADERS)?;
-        let mut batch = WriteBatch::default();
-        for entry in entries {
-            batch.put_cf(cf, entry.block_hash().as_byte_array(), entry.to_bytes());
-        }
-        self.db.write(batch)?;
-        Ok(())
-    }
-
-    /// Loads every stored header, in key order. Used at startup to rebuild the header tree.
-    pub fn load_all(&self) -> Result<Vec<HeaderEntry>> {
-        let cf = cf(&self.db, cf::HEADERS)?;
-        self.db
-            .iterator_cf(cf, IteratorMode::Start)
-            .map(|item| HeaderEntry::from_bytes(&item?.1))
-            .collect()
+impl Decode for HeaderEntry {
+    fn decode(bytes: &[u8]) -> Result<Self> {
+        HeaderEntry::from_bytes(bytes)
     }
 }
 
@@ -183,21 +147,5 @@ mod tests {
         status.remove(BlockStatus::FAILED);
         assert!(!status.contains(BlockStatus::FAILED));
         assert!(status.contains(BlockStatus::HEADER_VALID));
-    }
-
-    #[test]
-    fn put_get_load_all() {
-        let (_dir, storage) = open_temp();
-        let headers = storage.headers();
-        let a = entry(1, 10);
-        let b = entry(2, 11);
-
-        headers.put_many(&[a.clone(), b.clone()]).unwrap();
-        assert_eq!(headers.get(&a.block_hash()).unwrap(), Some(a.clone()));
-        assert_eq!(headers.get(&b.block_hash()).unwrap(), Some(b.clone()));
-
-        let mut all = headers.load_all().unwrap();
-        all.sort_by_key(|e| e.height);
-        assert_eq!(all, vec![a, b]);
     }
 }

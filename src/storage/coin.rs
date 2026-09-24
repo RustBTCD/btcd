@@ -1,7 +1,8 @@
 use bitcoin::TxOut;
 use bitcoin::encoding::{decode_from_slice, encode_to_vec};
 
-use super::{Result, StorageError};
+use super::db::table::{Decode, Encode};
+use super::{Error, Result};
 
 /// Bitcoin Core `MAX_SCRIPT_SIZE`.
 pub const MAX_SCRIPT_SIZE: usize = 10_000;
@@ -36,7 +37,7 @@ impl Coin {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
         let code = bytes
             .get(..CODE_LEN)
-            .ok_or_else(|| StorageError::corrupted("coin", "shorter than its height code"))?;
+            .ok_or_else(|| Error::corrupted("coin", "shorter than its height code"))?;
         let code = u32::from_le_bytes(code.try_into().expect("slice is CODE_LEN bytes"));
         let output = decode_output(&bytes[CODE_LEN..])?;
         Ok(Coin {
@@ -57,7 +58,19 @@ pub(crate) fn coin_bytes(output: &TxOut, height: u32, is_coinbase: bool) -> Vec<
 }
 
 fn decode_output(bytes: &[u8]) -> Result<TxOut> {
-    decode_from_slice::<TxOut>(bytes).map_err(|e| StorageError::corrupted("coin", e))
+    decode_from_slice::<TxOut>(bytes).map_err(|e| Error::corrupted("coin", e))
+}
+
+impl Encode for Coin {
+    fn encode(&self) -> Vec<u8> {
+        self.to_bytes()
+    }
+}
+
+impl Decode for Coin {
+    fn decode(bytes: &[u8]) -> Result<Self> {
+        Coin::from_bytes(bytes)
+    }
 }
 
 /// Coins spent by a block, in the order of its non-coinbase inputs.
@@ -74,7 +87,7 @@ impl BlockUndo {
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<Self> {
-        let corrupted = |reason: &'static str| StorageError::corrupted("undo data", reason);
+        let corrupted = |reason: &'static str| Error::corrupted("undo data", reason);
         let count = bytes
             .get(..4)
             .ok_or_else(|| corrupted("shorter than its coin count"))?;
@@ -122,6 +135,18 @@ pub(crate) fn undo_bytes(coins: &[Coin]) -> Vec<u8> {
         bytes.extend_from_slice(&output);
     }
     bytes
+}
+
+impl Encode for BlockUndo {
+    fn encode(&self) -> Vec<u8> {
+        self.to_bytes()
+    }
+}
+
+impl Decode for BlockUndo {
+    fn decode(bytes: &[u8]) -> Result<Self> {
+        BlockUndo::from_bytes(bytes)
+    }
 }
 
 #[cfg(test)]

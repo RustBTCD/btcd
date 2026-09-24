@@ -4,7 +4,7 @@
 //! Variants are transparent: they add no text, so the message is the module error's message.
 
 use crate::config::ConfigError;
-use crate::storage::StorageError;
+use crate::storage::Error as StorageError;
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {

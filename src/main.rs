@@ -29,7 +29,7 @@ fn run() -> Result<(), Error> {
 
     let storage = Storage::open(&config.storage)?;
     let path = config.storage.path.display();
-    match storage.chain().tip()? {
+    match storage.chainstate().tip()? {
         Some(tip) => println!("storage at {path}, tip {tip}"),
         None => println!("storage at {path}, empty chain"),
     }
