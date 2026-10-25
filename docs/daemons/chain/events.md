@@ -2,7 +2,8 @@
 
 Types are defined in [types.md](../../architecture/types.md).
 
-Order of emission during one activation: every `chain.block_disconnected`, then every `chain.block_connected`, then `chain.tip_changed`. Each event is emitted only after `utxo` has committed the change it describes.
+Order of emission during one activation: every `chain.block_disconnected`, then every `chain.block_connected`, then
+`chain.tip_changed`. Each event is emitted only after `utxo` has committed the change it describes.
 
 ## `chain.block_connected`
 
@@ -29,7 +30,8 @@ Subscribers in v0.1: none.
 
 ## `chain.tip_changed`
 
-The active tip moved. Emitted once after `bus.start` with the current tip and empty lists, then after every activation that changed the tip ([README](README.md#best-chain-activation)).
+The active tip moved. Emitted once after `bus.start` with the current tip and empty lists, then after every activation
+that changed the tip ([README](README.md#best-chain-activation)).
 
 | Field | Type | Description |
 |---|---|---|
@@ -44,4 +46,3 @@ Subscribers:
 |---|---|
 | net | Fill the start height of new `version` messages. |
 | block-sync | Announce new blocks to peers (only when `ibd` is false), refill the download window. |
-| tx-relay | Turn relay on or off with `ibd`; drop cached transactions that were confirmed or conflicted. |

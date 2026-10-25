@@ -8,8 +8,6 @@ Types are defined in [types.md](../../architecture/types.md).
 | [`utxo.coin`](#utxocoin) | ✓ | | read |
 | [`utxo.connect_block`](#utxoconnect_block) | | chain | write |
 | [`utxo.disconnect_block`](#utxodisconnect_block) | | chain | write |
-| [`utxo.check_tx`](#utxocheck_tx) | | tx-relay | read |
-| [`utxo.unspent`](#utxounspent) | | tx-relay | read |
 
 The write RPCs are callable only by `chain`.
 
@@ -74,7 +72,10 @@ The block's parent must be the current tip (or, at height 0, there must be no ti
 
 Errors:
 
-- `invalid`, with `data.reason` from Core where one exists: `bad-txns-BIP30`, `bad-txns-inputs-missingorspent`, `bad-txns-premature-spend-of-coinbase`, `bad-txns-in-belowout`, `bad-txns-inputvalues-outofrange`, `bad-txns-nonfinal` (sequence locks), `bad-blk-sigops`, `bad-cb-amount`, `block-validation-failed` (with `data.tx` and `data.input` for script failures). Nothing was changed.
+- `invalid`, with `data.reason` from Core where one exists: `bad-txns-BIP30`, `bad-txns-inputs-missingorspent`,
+  `bad-txns-premature-spend-of-coinbase`, `bad-txns-in-belowout`, `bad-txns-inputvalues-outofrange`, `bad-txns-nonfinal`
+  (sequence locks), `bad-blk-sigops`, `bad-cb-amount`, `block-validation-failed` (with `data.tx` and `data.input` for
+  script failures). Nothing was changed.
 - `precondition_failed`: the block does not extend the tip, or `height` is wrong. A bug in `chain`.
 
 ## `utxo.disconnect_block`
@@ -93,46 +94,3 @@ Errors:
 
 - `precondition_failed`: the block is not the tip.
 - `internal_error`: undo data is missing or does not match the block. The database is corrupt; `chain` stops the node.
-
-## `utxo.check_tx`
-
-Validate a transaction as if included in the next block ([README](README.md#loose-transaction-validation)). Changes nothing.
-
-| Param | Type | Required | Description |
-|---|---|---|---|
-| `tx` | string | yes | TxHex |
-
-```json
-{
-  "txid": "<Hash>",
-  "wtxid": "<Hash>",
-  "fee": 2820,
-  "vsize": 141,
-  "weight": 561,
-  "sigop_cost": 4,
-  "inputs": [{"txid": "<Hash>", "vout": 1}]
-}
-```
-
-`inputs` lists the spent outpoints, so tx-relay does not have to decode the transaction itself.
-
-Errors:
-
-- `missing_inputs` with `data.missing`: [Outpoint].
-- `invalid` with `data.reason`: Core's reasons, for example `bad-txns-vin-empty`, `bad-txns-oversize`, `bad-txns-premature-spend-of-coinbase`, `bad-txns-nonfinal`, `non-BIP68-final`, `bad-txns-in-belowout`, `mandatory-script-verify-flag-failed`.
-
-## `utxo.unspent`
-
-Which of the given outpoints are currently unspent.
-
-| Param | Type | Required | Description |
-|---|---|---|---|
-| `outpoints` | [Outpoint] | yes | At most 100 000 |
-
-```json
-{"tip": {"hash": "<Hash>", "height": 850000}, "unspent": [true, false, true]}
-```
-
-`unspent[i]` answers `outpoints[i]`. `tip` is the state the answer refers to.
-
-Errors: `invalid_params` if the list is too long.

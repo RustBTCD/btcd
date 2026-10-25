@@ -1,6 +1,7 @@
 # Startup and shutdown
 
-Rules: [lifecycle.md](../architecture/lifecycle.md), [manifest.md](../architecture/manifest.md), [storage.md](../architecture/storage.md#startup-reconciliation).
+Rules: [lifecycle.md](../architecture/lifecycle.md), [manifest.md](../architecture/manifest.md),
+[storage.md](../architecture/storage.md#startup-reconciliation).
 
 ## Startup
 
@@ -12,7 +13,6 @@ sequenceDiagram
     participant N as net
     participant C as chain
     participant BS as block-sync
-    participant TR as tx-relay
 
     Note over M: read config, lock datadir,<br/>open operator socket
     par spawn all
@@ -20,14 +20,12 @@ sequenceDiagram
         M->>N: spawn
         M->>C: spawn
         M->>BS: spawn
-        M->>TR: spawn
     end
     U->>M: bus.init (manifest)
     N->>M: bus.init
     C->>M: bus.init
     BS->>M: bus.init
-    TR->>M: bus.init
-    Note over M: validate registry,<br/>order: utxo, net, chain, block-sync, tx-relay
+    Note over M: validate registry,<br/>order: utxo, net, chain, block-sync
 
     M-->>U: init response (network, datadir, config)
     Note over U: open chainstate store
@@ -45,27 +43,23 @@ sequenceDiagram
     BS->>C: chain.info
     C-->>BS: tip, best header, ibd
     BS-)M: bus.ready
-    M-->>TR: init response
-    TR->>C: chain.info
-    C-->>TR: ibd
-    TR-)M: bus.ready
 
     M-)U: bus.start
     M-)N: bus.start
     M-)C: bus.start
     M-)BS: bus.start
-    M-)TR: bus.start
     C-)N: chain.tip_changed (initial)
     C-)BS: chain.tip_changed (initial)
-    C-)TR: chain.tip_changed (initial)
     Note over C: best-chain activation:<br/>connect stored blocks beyond the tip
     Note over N: listen, resolve seeds,<br/>open outbound connections
 ```
 
 Notes:
 
-- Steps 2–6: `rbtcd` answers no `bus.init` until all manifests are in and the registry is valid. A daemon that sends an invalid manifest makes the whole startup fail with the full list of problems.
-- Each daemon initialises only after its dependencies are ready, so `chain` can call `utxo.info`, and `block-sync` and `tx-relay` can call `chain.info`, during initialisation.
+- Steps 5–8: `rbtcd` answers no `bus.init` until all manifests are in and the registry is valid.
+  A daemon that sends an invalid manifest makes the whole startup fail with the full list of problems.
+- Each daemon initialises only after its dependencies are ready, so `chain` can call `utxo.info`, and `block-sync` can
+  call `chain.info`, during initialisation.
 - No event exists before `bus.start`. The initial `chain.tip_changed` gives every subscriber the starting tip.
 
 ## Recovery after a crash
@@ -96,7 +90,6 @@ sequenceDiagram
     autonumber
     actor O as operator
     participant M as rbtcd
-    participant TR as tx-relay
     participant BS as block-sync
     participant C as chain
     participant N as net
@@ -105,9 +98,6 @@ sequenceDiagram
     O->>M: node.stop
     M-->>O: {}
     Note over M: stop delivering events,<br/>refuse new operator requests
-    M->>TR: bus.shutdown
-    TR-->>M: done
-    Note over TR: exit
     M->>BS: bus.shutdown
     BS-->>M: done
     M->>C: bus.shutdown

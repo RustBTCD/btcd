@@ -29,4 +29,5 @@ Params: none.
 | `block_download` | Blocks between the tip and the best header are being downloaded. |
 | `synced` | The tip is the best header and the node is out of IBD. |
 
-`tip` and `best_header` are block-sync's view from the latest `chain.tip_changed` and `chain.submit_headers` results; `chain.info` is authoritative. `sync_peer` is `null` outside IBD.
+`tip` and `best_header` are block-sync's view from the latest `chain.tip_changed` and `chain.submit_headers` results;
+`chain.info` is authoritative. `sync_peer` is `null` outside IBD.

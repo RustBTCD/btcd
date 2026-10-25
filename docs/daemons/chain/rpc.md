@@ -4,7 +4,7 @@ Types are defined in [types.md](../../architecture/types.md).
 
 | RPC | Operator | Callers | Kind |
 |---|---|---|---|
-| [`chain.info`](#chaininfo) | ✓ | block-sync, tx-relay | read |
+| [`chain.info`](#chaininfo) | ✓ | block-sync | read |
 | [`chain.block`](#chainblock) | ✓ | block-sync | read |
 | [`chain.header`](#chainheader) | ✓ | | read |
 | [`chain.tips`](#chaintips) | ✓ | | read |
@@ -63,7 +63,8 @@ Errors: `not_found` with `data.reason` `unknown-block` or `block-data-missing` (
 |---|---|---|---|
 | `block` | string | yes | BlockId |
 
-Returns `HeaderInfo` plus `"hex": HeaderHex`. Works for any header in the index, including ones whose block is not stored.
+Returns `HeaderInfo` plus `"hex": HeaderHex`. Works for any header in the index, including ones whose block is not
+stored.
 
 Errors: `not_found`.
 
@@ -84,7 +85,8 @@ Params: none. Same meaning as Core's `getchaintips`.
 
 ## `chain.tx`
 
-Find a transaction in a given block. Without a transaction index, the block must be named (as Core's `getrawtransaction` with a block hash).
+Find a transaction in a given block. Without a transaction index, the block must be named (as Core's `getrawtransaction`
+with a block hash).
 
 | Param | Type | Required | Description |
 |---|---|---|---|
@@ -103,7 +105,8 @@ Errors: `not_found` with `data.reason` `unknown-block`, `block-data-missing` or 
 
 ## `chain.submit_headers`
 
-Validate and store headers received from a peer. Processing stops at the first invalid header; headers before it are kept.
+Validate and store headers received from a peer. Processing stops at the first invalid header;
+headers before it are kept.
 
 | Param | Type | Required | Description |
 |---|---|---|---|
@@ -124,7 +127,9 @@ Validate and store headers received from a peer. Processing stops at the first i
 | `ok` | Every header is valid. `new` counts headers that were not known before. `last` is the last header of the list. |
 | `unconnected` | The first header's parent is unknown. Nothing was stored. The caller should send `getheaders` with a fresh locator. |
 
-Errors: `invalid` with `data` `{"reason": <Core reason>, "hash": Hash, "index": <position in list>}`; for example `high-hash`, `bad-diffbits`, `time-too-old`, `time-too-new`, `bad-version`, `bad-prevblk`. Also `invalid_params` for headers that do not chain to each other.
+Errors: `invalid` with `data` `{"reason": <Core reason>, "hash": Hash, "index": <position in list>}`;
+for example `high-hash`, `bad-diffbits`, `time-too-old`, `time-too-new`, `bad-version`, `bad-prevblk`.
+Also `invalid_params` for headers that do not chain to each other.
 
 ## `chain.submit_block`
 
@@ -146,7 +151,10 @@ Errors: `invalid` with `data` `{"reason": <Core reason>, "hash": Hash, "index": 
 | `unconnected` | The block's parent header is unknown. |
 | `ignored` | Unrequested and not useful ([README](README.md#block-submission) step 4). |
 
-Errors: `invalid` with `data` `{"reason": <Core reason>, "mutated": bool}`. For example `bad-txnmrklroot` (mutated), `bad-cb-missing`, `bad-blk-weight`, `bad-txns-inputs-missingorspent` (from `utxo`), `block-validation-failed` (scripts). The error refers to the submitted block: it failed itself, or an ancestor connected in the same activation failed and it is now marked as having an invalid parent. Failures of unrelated blocks are only logged.
+Errors: `invalid` with `data` `{"reason": <Core reason>, "mutated": bool}`. For example `bad-txnmrklroot` (mutated),
+`bad-cb-missing`, `bad-blk-weight`, `bad-txns-inputs-missingorspent` (from `utxo`), `block-validation-failed` (scripts).
+The error refers to the submitted block: it failed itself, or an ancestor connected in the same activation failed and it
+is now marked as having an invalid parent. Failures of unrelated blocks are only logged.
 
 ## `chain.locator`
 
@@ -154,7 +162,8 @@ Errors: `invalid` with `data` `{"reason": <Core reason>, "mutated": bool}`. For 
 |---|---|---|---|
 | `from` | string | no | Hash to start from; default the best header |
 
-Returns `{"locator": [Hash]}`: the starting hash, then the previous 10 hashes, then exponentially larger steps back to genesis (Core's `GetLocator`). Error: `not_found`.
+Returns `{"locator": [Hash]}`: the starting hash, then the previous 10 hashes, then exponentially larger steps back to
+genesis (Core's `GetLocator`). Error: `not_found`.
 
 ## `chain.missing_blocks`
 
@@ -165,7 +174,9 @@ Blocks block-sync should download next.
 | `limit` | integer | no | Maximum entries, default 1024 |
 | `window` | integer | no | Only blocks at most this many heights above the active tip, default 1024 |
 
-Returns `{"blocks": [BlockRef]}` in ascending height: the blocks on the most-work valid header chain, above the fork point with the active chain, whose bodies are not stored, within the window. Empty when the active tip is the best header.
+Returns `{"blocks": [BlockRef]}` in ascending height: the blocks on the most-work valid header chain, above the fork
+point with the active chain, whose bodies are not stored, within the window. Empty when the active tip is the best
+header.
 
 ## `chain.headers_after`
 
@@ -177,4 +188,6 @@ Serve a peer's `getheaders` from the active chain, as Core does.
 | `stop` | string | no | Hash; stop after this header |
 | `max` | integer | no | Default and maximum 2000 |
 
-Starting point: the first locator hash that is on the active chain, or genesis if none is. Returns `{"headers": [HeaderHex]}` that follow it on the active chain. An empty locator returns only the `stop` header, if known.
+Starting point: the first locator hash that is on the active chain, or genesis if none is.
+Returns `{"headers": [HeaderHex]}` that follow it on the active chain. An empty locator returns only the `stop` header,
+if known.

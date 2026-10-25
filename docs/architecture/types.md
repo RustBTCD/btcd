@@ -1,6 +1,7 @@
 # Common types
 
-How values are represented in JSON on the bus and the operator socket. Event and RPC schemas in the daemon folders use these names.
+How values are represented in JSON on the bus and the operator socket. Event and RPC schemas in the daemon folders use
+these names.
 
 ## Scalars
 
@@ -11,7 +12,6 @@ How values are represented in JSON on the bus and the operator socket. Event and
 | `Height` | number | u32. |
 | `PeerId` | number | u64 assigned by `net`, unique for the lifetime of the `net` process and never reused. |
 | `Amount` | number | i64 satoshis. Never BTC as a decimal. |
-| `FeeRate` | number | u64 satoshis per 1000 virtual bytes (sat/kvB), the unit of BIP133 `feefilter`. |
 | `Work` | string | Cumulative chain work as 64 hex characters, as Core's `chainwork`. |
 | `Timestamp` | number | Unix time in seconds. |
 | `Network` | string | `main`, `testnet4`, `signet`, `regtest`. |
@@ -63,7 +63,10 @@ What `chain` knows about a header.
 }
 ```
 
-`status` is one of `active` (on the active chain), `valid_fork` (fully validated, not on the active chain), `valid_headers` (block stored and checked by `chain`, never connected), `headers_only` (block not stored), `invalid`. The same values are used by `chain.tips`, matching Core's `getchaintips`. `confirmations` and `next` are relative to the active chain, `0` and `null` when not on it. `bits` is the compact target as 8 hex characters.
+`status` is one of `active` (on the active chain), `valid_fork` (fully validated, not on the active chain),
+`valid_headers` (block stored and checked by `chain`, never connected), `headers_only` (block not stored), `invalid`.
+The same values are used by `chain.tips`, matching Core's `getchaintips`. `confirmations` and `next` are relative to the
+active chain, `0` and `null` when not on it. `bits` is the compact target as 8 hex characters.
 
 ### `TxInfo`
 
@@ -93,7 +96,8 @@ A decoded transaction.
 }
 ```
 
-For a coinbase input, `prevout` is `null` and `coinbase` holds the script as `Hex` instead of `script_sig`. `address` is present only when the script has a standard address form on the node's network.
+For a coinbase input, `prevout` is `null` and `coinbase` holds the script as `Hex` instead of `script_sig`.
+`address` is present only when the script has a standard address form on the node's network.
 
 ### `PeerMessage`
 
@@ -103,4 +107,5 @@ The payload of `net.send`; see [net/rpc.md](../daemons/net/rpc.md#netsend).
 
 - Field names are snake_case.
 - Optional fields are omitted when absent, except where a schema shows `null` explicitly.
-- Receivers MUST reject unknown fields in RPC params (`invalid_params`). Receivers MUST ignore unknown fields in events and results.
+- Receivers MUST reject unknown fields in RPC params (`invalid_params`). Receivers MUST ignore unknown fields in events
+  and results.

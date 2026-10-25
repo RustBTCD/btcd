@@ -1,6 +1,7 @@
 # New block relay
 
-Steady state after IBD: a peer announces a new block; the node fetches it, connects it, and announces it to its other peers. Rules: [block-sync](../daemons/block-sync/README.md#announcing-new-blocks).
+Steady state after IBD: a peer announces a new block; the node fetches it, connects it, and announces it to its other
+peers. Rules: [block-sync](../daemons/block-sync/README.md#announcing-new-blocks).
 
 ## Announcement by headers (BIP130)
 
@@ -14,7 +15,6 @@ sequenceDiagram
     participant BS as block-sync
     participant C as chain
     participant U as utxo
-    participant TR as tx-relay
 
     P1->>N: headers [H]
     N-)BS: net.headers (P1, [H])
@@ -31,18 +31,17 @@ sequenceDiagram
     C->>U: utxo.connect_block H
     U-->>C: ok
     C-)BS: chain.tip_changed (tip H, connected [H + header], ibd false)
-    C-)TR: chain.tip_changed
     C-->>BS: connected
     Note over BS: announce to peers whose best known is not H
     BS-)N: net.send headers [H] to P2
     BS-)N: net.send inv H to P3
     N->>P2: headers
     N->>P3: inv
-    Note over TR: drop cached txs confirmed or<br/>conflicted by H (transaction-relay.md)
 ```
 
 - P1 is skipped in the announcement because its best known block is already H.
-- If more than 8 blocks were connected at once (for example after a reorg), peers get an `inv` for the tip instead of `headers`.
+- If more than 8 blocks were connected at once (for example after a reorg), peers get an `inv` for the tip instead of
+  `headers`.
 
 ## Announcement by `inv`
 
@@ -78,4 +77,5 @@ sequenceDiagram
     N->>P: block H
 ```
 
-Serving a peer's `getheaders` follows the same pattern with `chain.headers_after` and a `headers` message, and is skipped during IBD.
+Serving a peer's `getheaders` follows the same pattern with `chain.headers_after` and a `headers` message, and is
+skipped during IBD.

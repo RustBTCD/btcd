@@ -1,6 +1,7 @@
 # Operator queries
 
-How the operator reads the node's state with the CLI. Rules: [rpc.md](../architecture/rpc.md#cli), and each daemon's `rpc.md`.
+How the operator reads the node's state with the CLI. Rules: [rpc.md](../architecture/rpc.md#cli), and each daemon's
+`rpc.md`.
 
 ## How one CLI call works
 
@@ -23,7 +24,9 @@ sequenceDiagram
     CLI-->>O: indented JSON, exit 0
 ```
 
-The CLI knows no daemon. Everything it needs comes from `node.help`, so new daemons and new RPCs work without changing it. `node.help` lists only what the caller may call, so internal RPCs such as `utxo.connect_block` look like unknown methods to the operator; a raw request on the socket gets `not_permitted`.
+The CLI knows no daemon. Everything it needs comes from `node.help`, so new daemons and new RPCs work without changing
+it. `node.help` lists only what the caller may call, so internal RPCs such as `utxo.connect_block` look like unknown
+methods to the operator; a raw request on the socket gets `not_permitted`.
 
 ## What the operator can ask in v0.1
 
@@ -37,11 +40,8 @@ The CLI knows no daemon. Everything it needs comes from `node.help`, so new daem
 | A header | `rbtc chain header <height or hash>` | chain |
 | Forks the node knows about | `rbtc chain tips` | chain |
 | A confirmed transaction | `rbtc chain tx <txid> <block>` | chain |
-| An unconfirmed transaction | `rbtc tx-relay tx <txid or wtxid>` | tx-relay |
-| Unconfirmed transactions known | `rbtc tx-relay list`, `rbtc tx-relay info` | tx-relay |
 | Is this output unspent, what does it hold? | `rbtc utxo coin <txid> <vout>` | utxo |
 | UTXO set size | `rbtc utxo info` | utxo |
-| Broadcast a transaction | `rbtc tx-relay submit <hex>` | tx-relay |
 | Peers and traffic | `rbtc net peers`, `rbtc net info` | net |
 | Add or drop a peer | `rbtc net connect <host:port>`, `rbtc net disconnect <peer>` | net |
 | Stop the node | `rbtc node stop` | rbtcd |
@@ -51,7 +51,8 @@ The CLI knows no daemon. Everything it needs comes from `node.help`, so new daem
 
 v0.1 has no transaction index, so `chain.tx` needs the block. Two ways to find it:
 
-- If one of its outputs is unspent: `rbtc utxo coin <txid> <vout>` gives the height, then `rbtc chain tx <txid> <height>`.
+- If one of its outputs is unspent: `rbtc utxo coin <txid> <vout>` gives the height, then
+  `rbtc chain tx <txid> <height>`.
 - Otherwise v0.1 cannot find it.
 
 ## Errors the operator sees

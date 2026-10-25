@@ -8,8 +8,8 @@ Types are defined in [types.md](../../architecture/types.md). `InvItem` is defin
 | [`net.peers`](#netpeers) | ✓ | | |
 | [`net.connect`](#netconnect) | ✓ | | |
 | [`net.disconnect`](#netdisconnect) | ✓ | | block-sync |
-| [`net.send`](#netsend) | | ✓ | block-sync, tx-relay |
-| [`net.misbehaving`](#netmisbehaving) | | ✓ | block-sync, tx-relay |
+| [`net.send`](#netsend) | | ✓ | block-sync |
+| [`net.misbehaving`](#netmisbehaving) | | ✓ | block-sync |
 
 ## `net.info`
 
@@ -47,7 +47,6 @@ Params: none.
       "user_agent": "/Satoshi:31.0.0/",
       "start_height": 850000,
       "relay": true,
-      "wtxid_relay": true,
       "connected_at": 1718000000,
       "last_send": 1718000500,
       "last_recv": 1718000501,
@@ -71,7 +70,8 @@ Open a manual connection. It is reconnected if lost, until the node restarts.
 
 Returns `{"peer": PeerId}` once the handshake completes.
 
-Errors: `invalid_params` (cannot parse or resolve), `rejected` with `data.reason` (`connection refused`, `timeout`, `handshake failed`, `rejected by hook: <reason>`, `already connected`).
+Errors: `invalid_params` (cannot parse or resolve), `rejected` with `data.reason` (`connection refused`, `timeout`,
+`handshake failed`, `rejected by hook: <reason>`, `already connected`).
 
 ## `net.disconnect`
 
@@ -86,7 +86,8 @@ Errors: `not_found`.
 
 ## `net.send`
 
-One-way. Queue a message for a peer. Silently dropped if the peer is gone, which is normal: the caller may not have processed `net.peer_disconnected` yet.
+One-way. Queue a message for a peer. Silently dropped if the peer is gone, which is normal:
+the caller may not have processed `net.peer_disconnected` yet.
 
 | Param | Type | Required | Description |
 |---|---|---|---|
@@ -99,19 +100,19 @@ One-way. Queue a message for a peer. Silently dropped if the peer is gone, which
 {"type": "getheaders", "locator": ["<Hash>"], "stop": null}
 {"type": "headers",    "headers": ["<HeaderHex>"]}
 {"type": "inv",        "items": [{"type": "witness_block", "hash": "<Hash>"}]}
-{"type": "getdata",    "items": [{"type": "wtx", "hash": "<Hash>"}]}
-{"type": "notfound",   "items": [{"type": "wtx", "hash": "<Hash>"}]}
+{"type": "getdata",    "items": [{"type": "witness_block", "hash": "<Hash>"}]}
 {"type": "block",      "block": "<BlockHex>", "witness": true}
-{"type": "tx",         "tx": "<TxHex>", "witness": true}
-{"type": "feefilter",  "feerate": 100}
 ```
 
-- For `block` and `tx`, `witness: false` makes `net` serialize without witness data (BIP144), for peers that asked with a non-witness inventory type.
-- `net` enforces the protocol limits (2000 headers, 50 000 inventory items, 101 locator hashes). A message over a limit is logged and dropped: it is a bug in the caller.
+- For `block`, `witness: false` makes `net` serialize without witness data (BIP144), for peers that asked with a
+  non-witness inventory type.
+- `net` enforces the protocol limits (2000 headers, 50 000 inventory items, 101 locator hashes).
+  A message over a limit is logged and dropped: it is a bug in the caller.
 
 ## `net.misbehaving`
 
-One-way. Disconnect the peer and discourage its address for `discourage_hours`. Used when a peer sent something invalid by consensus or broke the protocol in a way only the caller can see.
+One-way. Disconnect the peer and discourage its address for `discourage_hours`. Used when a peer sent something invalid
+by consensus or broke the protocol in a way only the caller can see.
 
 | Param | Type | Required | Description |
 |---|---|---|---|

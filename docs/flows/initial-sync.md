@@ -1,6 +1,7 @@
 # Initial sync (IBD)
 
-Headers first, then blocks in parallel from many peers, connected in order. Rules: [block-sync](../daemons/block-sync/README.md), [chain](../daemons/chain/README.md), [utxo](../daemons/utxo/README.md).
+Headers first, then blocks in parallel from many peers, connected in order. Rules:
+[block-sync](../daemons/block-sync/README.md), [chain](../daemons/chain/README.md), [utxo](../daemons/utxo/README.md).
 
 ## Header sync
 
@@ -55,7 +56,7 @@ sequenceDiagram
     P2->>N: block h17
     N-)BS: net.block (P2, h17)
     BS->>C: chain.submit_block (requested)
-    Note over C: checks pass, store durably;<br/>h1–h16 missing, nothing to connect
+    Note over C: checks pass, store durably<br/>h1–h16 missing, nothing to connect
     C-->>BS: stored
     P1->>N: block h1
     N-)BS: net.block (P1, h1)
@@ -68,10 +69,13 @@ sequenceDiagram
     Note over BS: refill: chain.missing_blocks,<br/>assign freed slots
 ```
 
-- Blocks arrive in any order. `chain` stores each one after its own checks and connects only along the chain, so `h17` waits until `h2`–`h16` are stored.
-- When the gap fills, one `chain.submit_block` call connects a whole run of stored blocks, one `utxo.connect_block` per block, and `chain.tip_changed` is split into events of at most 128 blocks.
-- During IBD, `tx-relay` ignores `chain.tip_changed` except for the `ibd` flag, and `block-sync` does not announce blocks.
-- Script checks are skipped for blocks below the assumevalid block ([chain](../daemons/chain/README.md#assumevalid)); every other check runs.
+- Blocks arrive in any order. `chain` stores each one after its own checks and connects only along the chain, so `h17`
+  waits until `h2`–`h16` are stored.
+- When the gap fills, one `chain.submit_block` call connects a whole run of stored blocks, one `utxo.connect_block` per
+  block, and `chain.tip_changed` is split into events of at most 128 blocks.
+- During IBD, `block-sync` does not announce blocks.
+- Script checks are skipped for blocks below the assumevalid block ([chain](../daemons/chain/README.md#assumevalid));
+  every other check runs.
 
 ## Stalling
 
@@ -84,7 +88,7 @@ sequenceDiagram
     BS->>N: net.disconnect (P1, stalling)
     N-->>BS: {}
     N-)BS: net.peer_disconnected (P1)
-    Note over BS: h1 … h16 missing again;<br/>stall timeout doubles (2 s → 4 s)
+    Note over BS: h1 … h16 missing again<br/>stall timeout doubles (2 s → 4 s)
     BS->>C: chain.missing_blocks
     C-->>BS: [h1 … h16]
     BS-)N: net.send getdata (h1–h16) to P3
@@ -94,7 +98,7 @@ A block requested more than `block_timeout_secs` ago is handled the same way, re
 
 ## End of IBD
 
-`chain` computes `ibd = false` once the tip has at least `min_chain_work` and is younger than `max_tip_age_hours`. The next `chain.tip_changed` carries `ibd: false`:
+`chain` computes `ibd = false` once the tip has at least `min_chain_work` and is younger than `max_tip_age_hours`.
+The next `chain.tip_changed` carries `ibd: false`:
 
 - `block-sync` starts announcing new blocks, serves `getheaders`, and sends `getheaders` to every peer.
-- `tx-relay` sends real `feefilter` values to all peers and starts requesting announced transactions.
