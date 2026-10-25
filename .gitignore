@@ -1,0 +1,8 @@
+# Rust build output
+/target/
+
+# IDE settings (RustRover / IntelliJ)
+/.idea/
+
+# Reference checkouts (Bitcoin Core, BIPs, …), see .claude/CLAUDE.md
+/.ref/
