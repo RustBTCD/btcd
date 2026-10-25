@@ -49,10 +49,8 @@ No in-memory coin cache in v0.1; each block is one write batch.
 
 | | |
 |---|---|
-| source | no |
 | subscribes | — |
 | emits events | — |
-| emits hooks | — |
 | serves RPCs | [rpc.md](rpc.md) |
 | calls | — |
 

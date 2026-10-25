@@ -1,0 +1,11 @@
+{
+  "event": "net.sendheaders",
+  "description": "The peer prefers block announcements as headers (BIP130).",
+  "payload": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["peer"],
+    "properties": {"peer": {"$ref": "../../../../schemas/common.json#/$defs/PeerId", "description": "The peer."}}
+  },
+  "examples": [{"peer": 7}]
+}

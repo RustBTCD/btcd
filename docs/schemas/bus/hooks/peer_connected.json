@@ -1,0 +1,32 @@
+{
+  "hook": "peer_connected",
+  "description": "After the peer's version message is accepted by net's own checks, before net sends verack. On reject, net disconnects the peer without sending verack, and no net.peer_connected or net.peer_disconnected event is emitted for it.",
+  "emitter": "net",
+  "default": "continue",
+  "timeout_secs": 5,
+  "payload": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["peer", "addr", "inbound", "services", "version", "user_agent", "start_height"],
+    "properties": {
+      "peer": {"$ref": "../../common.json#/$defs/PeerId"},
+      "addr": {"type": "string", "description": "ip:port."},
+      "inbound": {"type": "boolean"},
+      "services": {"$ref": "../../common.json#/$defs/Services", "description": "Services the peer advertised."},
+      "version": {"type": "integer", "description": "Protocol version."},
+      "user_agent": {"type": "string"},
+      "start_height": {"$ref": "../../common.json#/$defs/Height", "description": "Height the peer reported."}
+    }
+  },
+  "examples": [
+    {
+      "peer": 7,
+      "addr": "203.0.113.5:8333",
+      "inbound": true,
+      "services": {"bits": 1033, "names": ["NETWORK", "WITNESS", "NETWORK_LIMITED"]},
+      "version": 70016,
+      "user_agent": "/Satoshi:31.0.0/",
+      "start_height": 850000
+    }
+  ]
+}

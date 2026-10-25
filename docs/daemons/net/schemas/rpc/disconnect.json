@@ -1,0 +1,19 @@
+{
+  "rpc": "net.disconnect",
+  "description": "Close a connection. A manual peer disconnected this way is not reconnected.",
+  "operator": true,
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["peer"],
+    "properties": {
+      "peer": {"$ref": "../../../../schemas/common.json#/$defs/PeerId"},
+      "reason": {"type": "string", "description": "Logged; default requested."}
+    }
+  },
+  "response": {"type": "object", "additionalProperties": false},
+  "examples": [
+    {"request": {"peer": 7}, "response": {}},
+    {"request": {"peer": 7, "reason": "stalling"}, "response": {}}
+  ]
+}

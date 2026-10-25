@@ -1,0 +1,52 @@
+{
+  "rpc": "node.help",
+  "description": "RPC descriptions and parameters, grouped by daemon and filtered to what the caller may call. The rbtc CLI uses it to map arguments.",
+  "operator": true,
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "daemon": {"type": "string", "description": "Limit to one daemon (node included)."},
+      "rpc": {"type": "string", "description": "Limit to one RPC; requires daemon."}
+    }
+  },
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["daemons"],
+    "properties": {
+      "daemons": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "rpcs"],
+          "properties": {
+            "name": {"type": "string", "description": "Daemon name, or node for rbtcd's own RPCs."},
+            "rpcs": {"type": "array", "items": {"$ref": "../../../../schemas/bus/manifest.json#/$defs/RpcDescriptor"}}
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "request": {"daemon": "chain", "rpc": "block"},
+      "response": {
+        "daemons": [
+          {
+            "name": "chain",
+            "rpcs": [
+              {
+                "name": "block",
+                "description": "A stored block, decoded.",
+                "operator": true,
+                "params": [{"name": "block", "type": "string", "required": true, "description": "Block hash or height."}]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

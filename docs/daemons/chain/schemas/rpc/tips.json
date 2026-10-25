@@ -1,0 +1,47 @@
+{
+  "rpc": "chain.tips",
+  "description": "All known chain tips, as Core's getchaintips.",
+  "operator": true,
+  "request": {"type": "object", "additionalProperties": false},
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["tips"],
+    "properties": {
+      "tips": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hash", "height", "branch_len", "status"],
+          "properties": {
+            "hash": {"$ref": "../../../../schemas/common.json#/$defs/Hash"},
+            "height": {"$ref": "../../../../schemas/common.json#/$defs/Height"},
+            "branch_len": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 4294967295,
+              "description": "Length of the branch from the active chain; 0 for the active tip."
+            },
+            "status": {"$ref": "../types.json#/$defs/HeaderStatus"}
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "request": {},
+      "response": {
+        "tips": [
+          {
+            "hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+            "height": 1,
+            "branch_len": 0,
+            "status": "active"
+          }
+        ]
+      }
+    }
+  ]
+}

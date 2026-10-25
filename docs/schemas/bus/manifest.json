@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Manifest",
+  "description": "What a subdaemon declares in bus.init: everything it will do on the bus. See docs/architecture/manifest.md.",
+  "$defs": {
+    "Manifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "protocol", "subscribes", "emits", "rpcs", "calls"],
+      "properties": {
+        "name": {"$ref": "#/$defs/DaemonName", "description": "Must equal the name rbtcd started the daemon under."},
+        "version": {"type": "string", "description": "The daemon's own version, shown by rbtc node status."},
+        "protocol": {"type": "integer", "minimum": 1, "maximum": 4294967295, "description": "Bus protocol version. v0.1 is 1."},
+        "subscribes": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["events", "hooks"],
+          "properties": {
+            "events": {"type": "array", "items": {"$ref": "#/$defs/FullName"}, "description": "Events to receive, <emitter>.<event>."},
+            "hooks": {"type": "array", "items": {"$ref": "#/$defs/ShortName"}, "description": "Hooks to receive, without the hook. prefix."}
+          }
+        },
+        "emits": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["events"],
+          "properties": {"events": {"type": "array", "items": {"$ref": "#/$defs/EventDescriptor"}}}
+        },
+        "rpcs": {"type": "array", "items": {"$ref": "#/$defs/RpcDescriptor"}, "description": "RPCs this daemon serves."},
+        "calls": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/FullName"},
+          "description": "Every RPC this daemon may call, <daemon>.<rpc>, including node.* RPCs."
+        }
+      },
+      "examples": [
+        {
+          "name": "chain",
+          "version": "0.1.0",
+          "protocol": 1,
+          "subscribes": {"events": [], "hooks": []},
+          "emits": {"events": [{"name": "block_connected", "description": "A block was connected to the active chain."}]},
+          "rpcs": [
+            {
+              "name": "block",
+              "description": "A stored block, decoded.",
+              "operator": true,
+              "params": [{"name": "block", "type": "string", "required": true, "description": "Block hash or height."}]
+            }
+          ],
+          "calls": ["utxo.info", "utxo.connect_block", "utxo.disconnect_block"]
+        }
+      ]
+    },
+    "EventDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description"],
+      "properties": {
+        "name": {"$ref": "#/$defs/ShortName", "description": "Short name; rbtcd prefixes the daemon name."},
+        "description": {"type": "string"}
+      }
+    },
+    "RpcDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "description", "operator", "params"],
+      "properties": {
+        "name": {"$ref": "#/$defs/ShortName", "description": "Short name; the full name is <daemon>.<name>."},
+        "description": {"type": "string", "description": "One line, shown by rbtc help."},
+        "operator": {"type": "boolean", "description": "Callable from the operator socket."},
+        "params": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/Param"},
+          "description": "Ordered parameters; the order defines how the CLI maps positional arguments."
+        }
+      }
+    },
+    "Param": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "required", "description"],
+      "properties": {
+        "name": {"$ref": "#/$defs/ShortName"},
+        "type": {
+          "type": "string",
+          "enum": ["string", "integer", "boolean", "json"],
+          "description": "How the CLI parses the argument; see docs/architecture/manifest.md."
+        },
+        "required": {"type": "boolean"},
+        "default": {"description": "The value used when the parameter is omitted."},
+        "description": {"type": "string"}
+      }
+    },
+    "DaemonName": {"type": "string", "pattern": "^[a-z][a-z0-9-]*$", "description": "Kebab-case daemon name."},
+    "ShortName": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$", "description": "Snake_case event, RPC, hook or parameter name."},
+    "FullName": {"type": "string", "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9_]*$", "description": "<daemon>.<name>."}
+  }
+}

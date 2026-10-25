@@ -1,0 +1,66 @@
+{
+  "rpc": "chain.info",
+  "description": "Tip, best header and IBD state.",
+  "operator": true,
+  "request": {"type": "object", "additionalProperties": false},
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["network", "tip", "best_header", "ibd", "assume_valid", "min_chain_work", "headers", "size_on_disk"],
+    "properties": {
+      "network": {"$ref": "../../../../schemas/common.json#/$defs/Network"},
+      "tip": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["hash", "height", "time", "mtp", "work"],
+            "properties": {
+              "hash": {"$ref": "../../../../schemas/common.json#/$defs/Hash"},
+              "height": {"$ref": "../../../../schemas/common.json#/$defs/Height"},
+              "time": {"$ref": "../../../../schemas/common.json#/$defs/Timestamp", "description": "Block timestamp."},
+              "mtp": {"$ref": "../../../../schemas/common.json#/$defs/Timestamp", "description": "Median time past."},
+              "work": {"$ref": "../../../../schemas/common.json#/$defs/Work"}
+            }
+          },
+          {"type": "null"}
+        ],
+        "description": "The active tip; null before genesis is connected."
+      },
+      "best_header": {"$ref": "../types.json#/$defs/HeaderWork", "description": "The tip of the most-work valid header chain."},
+      "ibd": {"type": "boolean", "description": "Whether the node is in initial block download."},
+      "assume_valid": {
+        "oneOf": [{"$ref": "../../../../schemas/common.json#/$defs/Hash"}, {"type": "null"}],
+        "description": "The assumevalid block; null when disabled."
+      },
+      "min_chain_work": {"$ref": "../../../../schemas/common.json#/$defs/Work"},
+      "headers": {"type": "integer", "minimum": 0, "description": "Valid headers in the index."},
+      "size_on_disk": {"type": "integer", "minimum": 0, "description": "Bytes used by the index and block stores."}
+    }
+  },
+  "examples": [
+    {
+      "request": {},
+      "response": {
+        "network": "regtest",
+        "tip": {
+          "hash": "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
+          "height": 0,
+          "time": 1296688602,
+          "mtp": 1296688602,
+          "work": "0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        "best_header": {
+          "hash": "0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206",
+          "height": 0,
+          "work": "0000000000000000000000000000000000000000000000000000000000000002"
+        },
+        "ibd": true,
+        "assume_valid": null,
+        "min_chain_work": "0000000000000000000000000000000000000000000000000000000000000000",
+        "headers": 1,
+        "size_on_disk": 293
+      }
+    }
+  ]
+}

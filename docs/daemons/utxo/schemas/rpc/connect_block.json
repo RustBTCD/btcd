@@ -1,0 +1,48 @@
+{
+  "rpc": "utxo.connect_block",
+  "description": "Validate a block's inputs and scripts and apply it on top of the tip. Atomic.",
+  "operator": false,
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["block", "height", "script_flags", "verify_scripts", "enforce_bip30", "enforce_bip68"],
+    "properties": {
+      "block": {"$ref": "../../../../schemas/common.json#/$defs/BlockHex"},
+      "height": {"$ref": "../../../../schemas/common.json#/$defs/Height", "description": "The block's height."},
+      "script_flags": {
+        "type": "array",
+        "uniqueItems": true,
+        "items": {
+          "type": "string",
+          "enum": ["P2SH", "DERSIG", "NULLDUMMY", "CHECKLOCKTIMEVERIFY", "CHECKSEQUENCEVERIFY", "WITNESS", "TAPROOT"]
+        },
+        "description": "Consensus script flags for this block."
+      },
+      "verify_scripts": {"type": "boolean", "description": "false when assumevalid applies."},
+      "enforce_bip30": {"type": "boolean", "description": "Whether to check BIP30 for this block."},
+      "enforce_bip68": {"type": "boolean", "description": "Whether BIP68 sequence locks apply (CSV active)."}
+    }
+  },
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["tip", "fees"],
+    "properties": {
+      "tip": {"$ref": "../../../../schemas/common.json#/$defs/BlockRef", "description": "The new tip: the connected block."},
+      "fees": {"$ref": "../../../../schemas/common.json#/$defs/Amount", "description": "Total fees of the block's transactions."}
+    }
+  },
+  "examples": [
+    {
+      "request": {
+        "block": "010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e362990101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000",
+        "height": 1,
+        "script_flags": ["P2SH", "WITNESS", "TAPROOT"],
+        "verify_scripts": false,
+        "enforce_bip30": true,
+        "enforce_bip68": false
+      },
+      "response": {"tip": {"hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", "height": 1}, "fees": 0}
+    }
+  ]
+}

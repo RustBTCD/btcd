@@ -1,0 +1,36 @@
+{
+  "rpc": "chain.locator",
+  "description": "Block locator for getheaders: the starting hash, the previous 10 hashes, then exponentially larger steps back to genesis (Core's GetLocator).",
+  "operator": false,
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "from": {"$ref": "../../../../schemas/common.json#/$defs/Hash", "description": "Hash to start from; default the best header."}
+    }
+  },
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["locator"],
+    "properties": {
+      "locator": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 101,
+        "items": {"$ref": "../../../../schemas/common.json#/$defs/Hash"}
+      }
+    }
+  },
+  "examples": [
+    {
+      "request": {},
+      "response": {
+        "locator": [
+          "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+          "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
+        ]
+      }
+    }
+  ]
+}

@@ -103,10 +103,8 @@ Every other check still runs. `assume_valid = "none"` verifies everything.
 
 | | |
 |---|---|
-| source | no |
 | subscribes | — |
 | emits events | [events.md](events.md) |
-| emits hooks | — |
 | serves RPCs | [rpc.md](rpc.md) |
 | calls | `utxo.info`, `utxo.connect_block`, `utxo.disconnect_block` |
 

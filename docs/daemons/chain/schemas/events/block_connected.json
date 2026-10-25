@@ -1,0 +1,21 @@
+{
+  "event": "chain.block_connected",
+  "description": "A block was connected to the active chain. Emitted for every step of an activation, after utxo committed it.",
+  "payload": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["hash", "height", "prev"],
+    "properties": {
+      "hash": {"$ref": "../../../../schemas/common.json#/$defs/Hash"},
+      "height": {"$ref": "../../../../schemas/common.json#/$defs/Height"},
+      "prev": {"$ref": "../../../../schemas/common.json#/$defs/Hash", "description": "The parent block; all zeros for genesis."}
+    }
+  },
+  "examples": [
+    {
+      "hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+      "height": 1,
+      "prev": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f"
+    }
+  ]
+}

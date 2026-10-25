@@ -5,12 +5,14 @@ the transport and the handler are the same for both.
 
 ## Semantics
 
-- **Name:** `<daemon>.<rpc>`. The daemon serving it declares it in its manifest with a parameter schema and permissions
-  ([manifest.md](manifest.md#schema)).
-- **Request/response:** the caller sends a request and gets exactly one response: `result` or `error`.
+- **Name:** `<daemon>.<rpc>`. The daemon serving it declares it in its manifest with a parameter schema and an
+  `operator` flag ([manifest.md](manifest.md#schema)).
+- **Request/response:** the caller sends a request and gets exactly one response: `result` or `error`. Every RPC is
+  answered, including commands with nothing to report, which return `{}`. A caller that does not need the outcome may
+  send the request and not wait for the response.
 - **Single owner:** `rbtcd` routes the request to the daemon named in the method. There is no fan-out.
-- **Permissions:** checked by `rbtcd` before forwarding. A daemon may call only the RPCs listed in its own `calls`, and
-  only if the target lists it in `callers`. The operator may call only RPCs with `operator: true` and `node.*`.
+- **Permissions:** checked by `rbtcd` before forwarding. A daemon may call only the RPCs listed in its own `calls`.
+  The operator may call only RPCs with `operator: true` and `node.*`.
 - **Caller identity:** the handler sees the caller in the `from` envelope member (`operator`, `node`, or a daemon name).
   Handlers MAY use it, for example to word errors for the operator, but MUST NOT use it as a substitute for the
   permission checks.
@@ -19,23 +21,13 @@ the transport and the handler are the same for both.
 - **Concurrency:** a daemon decides itself whether it handles requests one at a time or concurrently.
   Each daemon's README states its choice. Daemons that change persistent state (`chain`, `utxo`) serialize their writes.
 
-### One-way RPCs
-
-An RPC declared with `one_way: true` is called as a notification (no `id`) and never answered.
-It is used for high-volume commands where the caller has nothing to do with a result, such as `net.send`.
-
-- One-way RPCs are delivered within the target's credit window, like events, and arrive in the order the caller sent
-  them.
-- The callee logs failures; the caller never learns about them.
-- One-way RPCs are never callable by the operator.
-
 ### When to use what
 
 | The caller wants to… | Use |
 |---|---|
 | tell everyone something happened | event |
 | make one daemon do something and know the outcome | RPC |
-| make one daemon do something and not wait | one-way RPC |
+| make one daemon do something and not wait | RPC, without waiting for the response |
 | read another daemon's state | RPC |
 | let unknown parties veto an action | hook |
 
@@ -88,7 +80,7 @@ Examples:
 ```
 rbtc chain info
 rbtc chain block 850000
-rbtc chain block 00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054 --verbosity 0
+rbtc chain raw_block 00000000000000000002a7c4c1e48d76c5a37902165a270156b7a8d72728a054
 rbtc chain tx 1a2b…f0 0000…a054
 rbtc utxo coin 1a2b…f0 1
 rbtc net peers
@@ -121,35 +113,36 @@ Where Bitcoin Core has a reject reason for the same failure (`bad-txns-inputs-mi
 
 ## Catalogue
 
-`op` = callable by the operator. `1w` = one-way. Callers are daemons allowed in `callers`.
+`op` = callable by the operator.
 
-| RPC | op | 1w | Callers | Purpose |
-|---|---|---|---|---|
-| `node.status` | ✓ | | * | Daemons, their state and pids, uptime, network |
-| `node.help` | ✓ | | * | RPC descriptions and parameter schemas |
-| `node.registry` | ✓ | | * | Full registry: events, hooks, subscribers, RPCs, call graph |
-| `node.stop` | ✓ | | | Orderly shutdown |
-| `net.info` | ✓ | | | Listening state, connection counts, traffic totals |
-| `net.peers` | ✓ | | | Connected peers |
-| `net.connect` | ✓ | | | Open a manual connection |
-| `net.disconnect` | ✓ | | block-sync | Close a connection |
-| `net.send` | | ✓ | block-sync | Send a P2P message to a peer |
-| `net.misbehaving` | | ✓ | block-sync | Disconnect and discourage a peer |
-| `chain.info` | ✓ | | block-sync | Tip, best header, IBD state |
-| `chain.block` | ✓ | | block-sync | A stored block, raw or decoded |
-| `chain.header` | ✓ | | | A header with its index data |
-| `chain.tips` | ✓ | | | All known chain tips (Core's `getchaintips`) |
-| `chain.tx` | ✓ | | | A transaction from a given block |
-| `chain.submit_headers` | | | block-sync | Validate and store headers |
-| `chain.submit_block` | | | block-sync | Validate, store and possibly connect a block |
-| `chain.locator` | | | block-sync | Block locator for `getheaders` |
-| `chain.missing_blocks` | | | block-sync | Blocks to download next |
-| `chain.headers_after` | | | block-sync | Headers to serve a peer's `getheaders` |
-| `utxo.info` | ✓ | | chain | UTXO tip and set statistics |
-| `utxo.coin` | ✓ | | | One unspent output (Core's `gettxout`) |
-| `utxo.connect_block` | | | chain | Validate inputs and scripts and apply a block |
-| `utxo.disconnect_block` | | | chain | Undo the tip block |
-| `block-sync.status` | ✓ | | | Sync state, peers and blocks in flight |
+| RPC | op | Purpose |
+|---|---|---|
+| `node.status` | ✓ | Daemons, their state and pids, uptime, network |
+| `node.help` | ✓ | RPC descriptions and parameter schemas |
+| `node.registry` | ✓ | Full registry: events, hooks, subscribers, RPCs, call graph |
+| `node.stop` | ✓ | Orderly shutdown |
+| `net.info` | ✓ | Listening state, connection counts, traffic totals |
+| `net.peers` | ✓ | Connected peers |
+| `net.connect` | ✓ | Open a manual connection |
+| `net.disconnect` | ✓ | Close a connection |
+| `net.send` |  | Send a P2P message to a peer |
+| `net.misbehaving` |  | Disconnect and discourage a peer |
+| `chain.info` | ✓ | Tip, best header, IBD state |
+| `chain.block` | ✓ | A stored block, decoded |
+| `chain.raw_block` | ✓ | A stored block in consensus encoding |
+| `chain.header` | ✓ | A header with its index data |
+| `chain.tips` | ✓ | All known chain tips (Core's `getchaintips`) |
+| `chain.tx` | ✓ | A transaction from a given block |
+| `chain.submit_headers` |  | Validate and store headers |
+| `chain.submit_block` |  | Validate, store and possibly connect a block |
+| `chain.locator` |  | Block locator for `getheaders` |
+| `chain.missing_blocks` |  | Blocks to download next |
+| `chain.headers_after` |  | Headers to serve a peer's `getheaders` |
+| `utxo.info` | ✓ | UTXO tip and set statistics |
+| `utxo.coin` | ✓ | One unspent output (Core's `gettxout`) |
+| `utxo.connect_block` |  | Validate inputs and scripts and apply a block |
+| `utxo.disconnect_block` |  | Undo the tip block |
+| `block-sync.status` | ✓ | Sync state, peers and blocks in flight |
 
 Full schemas: [main](../daemons/main/README.md#rpcs), [net](../daemons/net/rpc.md), [chain](../daemons/chain/rpc.md),
 [utxo](../daemons/utxo/rpc.md), [block-sync](../daemons/block-sync/rpc.md).

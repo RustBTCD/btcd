@@ -1,0 +1,100 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "net types",
+  "description": "Types shared by net's own RPC and event schemas.",
+  "$defs": {
+    "InvItem": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A block item of an inv or getdata message.",
+      "required": ["type", "hash"],
+      "properties": {
+        "type": {"type": "string", "enum": ["block", "witness_block", "cmpct_block"]},
+        "hash": {"$ref": "../../../schemas/common.json#/$defs/Hash"}
+      }
+    },
+    "ConnType": {
+      "type": "string",
+      "enum": ["outbound_full_relay", "manual", "inbound"],
+      "description": "How the connection was made."
+    },
+    "PeerMessage": {
+      "description": "A P2P message for net.send. The type field selects the message.",
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "locator", "stop"],
+          "properties": {
+            "type": {"const": "getheaders"},
+            "locator": {
+              "type": "array",
+              "maxItems": 101,
+              "items": {"$ref": "../../../schemas/common.json#/$defs/Hash"},
+              "description": "Block locator, at most 101 hashes."
+            },
+            "stop": {
+              "oneOf": [{"$ref": "../../../schemas/common.json#/$defs/Hash"}, {"type": "null"}],
+              "description": "Stop hash; null asks for as many as allowed."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "headers"],
+          "properties": {
+            "type": {"const": "headers"},
+            "headers": {
+              "type": "array",
+              "maxItems": 2000,
+              "items": {"$ref": "../../../schemas/common.json#/$defs/HeaderHex"},
+              "description": "At most 2000 headers."
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "items"],
+          "properties": {
+            "type": {"const": "inv"},
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50000,
+              "items": {"$ref": "#/$defs/InvItem"}
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "items"],
+          "properties": {
+            "type": {"const": "getdata"},
+            "items": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 50000,
+              "items": {"$ref": "#/$defs/InvItem"}
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "block", "witness"],
+          "properties": {
+            "type": {"const": "block"},
+            "block": {"$ref": "../../../schemas/common.json#/$defs/BlockHex"},
+            "witness": {
+              "type": "boolean",
+              "description": "false serializes without witness data (BIP144), for peers that asked with a non-witness inventory type."
+            }
+          }
+        }
+      ]
+    }
+  }
+}

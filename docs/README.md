@@ -21,8 +21,10 @@ What each version must deliver: [milestones.md](milestones.md).
 7. [architecture/storage.md](architecture/storage.md): who owns which data and how state stays consistent across
    processes and crashes.
 8. [architecture/types.md](architecture/types.md): JSON representation of the common types.
-9. [flows/](flows/README.md): end-to-end flows as sequence diagrams.
-10. [daemons/](daemons/): one folder per process with its responsibilities, state, manifest, events and RPCs.
+9. [architecture/schemas.md](architecture/schemas.md): schema files for RPCs and events, and the Rust API crates
+   generated from them.
+10. [flows/](flows/README.md): end-to-end flows as sequence diagrams.
+11. [daemons/](daemons/): one folder per process with its responsibilities, state, manifest, events and RPCs.
 
 ## Layout
 
@@ -38,7 +40,8 @@ docs/
 │   ├── rpc.md
 │   ├── lifecycle.md
 │   ├── storage.md
-│   └── types.md
+│   ├── types.md
+│   └── schemas.md
 ├── flows/
 │   ├── README.md
 │   ├── startup-and-shutdown.md
@@ -76,7 +79,7 @@ docs/
 | Bus | The set of connections between `rbtcd` and the subdaemons, plus the routing rules in `rbtcd`. |
 | Event | A fact that already happened, broadcast to all subscribers, no response. |
 | Hook | A synchronous interception point from the fixed table in `rbtcd`. The emitter waits until every subscriber has answered `continue` or one has answered `reject`. |
-| RPC | A command or query addressed to exactly one daemon, with a response. A one-way RPC has no response. |
+| RPC | A command or query addressed to exactly one daemon, always answered with a response. |
 | Manifest | What a subdaemon declares in its init message: subscriptions, emitted events and hooks, RPCs it serves, RPCs it calls. |
 | Operator | A human or external program using the operator socket, normally through the `rbtc` CLI. |
 | Active chain | The chain of blocks currently connected to the UTXO set, from genesis to the tip. |

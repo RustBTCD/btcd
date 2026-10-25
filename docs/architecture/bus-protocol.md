@@ -23,25 +23,26 @@ How `rbtcd` and the subdaemons exchange messages. Applies to every subdaemon.
 
 ## Envelope
 
-The shapes are JSON-RPC 2.0. `params` is always an object (named parameters only).
+The shapes are JSON-RPC 2.0, defined exactly in [bus/envelope.json](../schemas/bus/envelope.json). `params` is always
+an object (named parameters only).
 
-| Shape | Members | Used for |
-|---|---|---|
-| Request | `jsonrpc`, `id`, `method`, `params`, `from`¹ | RPC calls, hook calls, `bus.init`, `bus.shutdown` |
-| Notification | `jsonrpc`, `method`, `params`, `from`¹ | events, one-way RPCs, bus control messages |
-| Response | `jsonrpc`, `id`, `result` or `error` | answers to requests |
+| Shape | Used for |
+|---|---|
+| `Request`: `jsonrpc`, `id`, `method`, `params`, `from`¹ | RPC calls, hook calls, `bus.init`, `bus.shutdown` |
+| `Notification`: `jsonrpc`, `method`, `params` | events, bus control messages |
+| `Response`: `jsonrpc`, `id`, `result` or `error` | answers to requests |
 
-¹ `from` is set by `rbtcd` on requests and one-way RPCs it delivers to a subdaemon: the caller's daemon name,
+¹ `from` is set by `rbtcd` on requests it delivers to a subdaemon: the caller's daemon name,
 `operator`, or `node` when the caller is `rbtcd` itself. Subdaemons MUST NOT set it; `rbtcd` ignores any value a
 subdaemon sends.
 
 ```json
-{"jsonrpc":"2.0","id":17,"method":"chain.submit_block","params":{"block":"0100…","peer":42}}
-{"jsonrpc":"2.0","id":17,"result":{"status":"connected","tip":{"hash":"0000…","height":850001}}}
+{"jsonrpc":"2.0","id":17,"method":"chain.submit_block","params":{"block":"0100…","requested":true,"peer":42}}
+{"jsonrpc":"2.0","id":17,"result":{"status":"connected","hash":"0000…","tip":{"hash":"0000…","height":850001}}}
 {"jsonrpc":"2.0","method":"chain.block_connected","params":{"hash":"0000…","height":850001,"prev":"0000…"}}
 ```
 
-`error` objects are `{"code": <integer>, "message": <string>, "data": <any, optional>}`. Codes are listed in
+`error` objects have a `code`, a `message` and optional `data` (`Error` in the envelope schema). Codes are listed in
 [rpc.md](rpc.md#error-codes).
 
 ### Request ids
@@ -61,9 +62,8 @@ Messages a subdaemon `S` sends:
 | Shape | Method | Meaning | Routing |
 |---|---|---|---|
 | Notification | `S.<event>`, declared in S's `emits.events` | event | to every subscriber of the event |
-| Notification | `T.<rpc>`, a one-way RPC of another daemon T | one-way RPC | to T |
 | Request | `T.<rpc>` or `node.<rpc>` | RPC | to T (or handled by `rbtcd`), response back to S |
-| Request | `hook.<name>`, declared in S's `emits.hooks` | hook | to each hook subscriber in turn, aggregated result back to S |
+| Request | `hook.<name>`, S is the hook's emitter in the hook table | hook | to each hook subscriber in turn, aggregated result back to S |
 | Request | `bus.init` | manifest | handled by `rbtcd` |
 | Notification | `bus.ready`, `bus.ack` | control | handled by `rbtcd` |
 | Response | — | answer to a request `rbtcd` delivered | back to whoever sent the original request |
@@ -73,7 +73,6 @@ Messages `rbtcd` sends to a subdaemon `S`:
 | Shape | Method | Meaning |
 |---|---|---|
 | Notification | `X.<event>` where X ≠ S | an event S subscribed to |
-| Notification | `S.<rpc>` | a one-way RPC call to S |
 | Request | `S.<rpc>` | an RPC call to S |
 | Request | `hook.<name>` | a hook call S subscribed to |
 | Notification | `bus.start`, `bus.pause`, `bus.resume` | control |
@@ -81,7 +80,7 @@ Messages `rbtcd` sends to a subdaemon `S`:
 | Response | — | answer to S's `bus.init`, RPC or hook |
 
 Anything else is a protocol violation: emitting an event not declared in the manifest, calling an RPC not listed in
-`calls`, emitting a hook not declared in `emits.hooks`, answering a request that was never sent.
+`calls`, emitting a hook whose emitter in the hook table is another daemon, answering a request that was never sent.
 
 ## Physical path of a message
 
@@ -105,9 +104,9 @@ sequenceDiagram
 
 ## Ordering guarantees
 
-1. **Notifications from one source to one destination arrive in the order they were sent.** This covers events and
-   one-way RPCs. For example, `net.peer_connected` for peer 7 always reaches `block-sync` before `net.headers` from peer
-   7, and `net.peer_disconnected` comes after every other event about peer 7.
+1. **Notifications from one source to one destination arrive in the order they were sent.** For example,
+   `net.peer_connected` for peer 7 always reaches `block-sync` before `net.headers` from peer 7, and
+   `net.peer_disconnected` comes after every other event about peer 7.
 2. There is **no ordering between different sources**. An event from `chain` and an event from `net` may arrive in
    either order.
 3. There is **no ordering between notifications and responses**, even from the same source.
@@ -115,8 +114,9 @@ sequenceDiagram
    `chain.submit_block` before or after the `chain.tip_changed` that the same call caused.
    Handlers must not depend on either order.
 4. A hook's emitter receives the result only after every subscriber it reached has answered.
-5. Concurrent requests have no order. A caller that needs ordered effects waits for each response before sending the
-   next request.
+5. **Requests from one caller to one target are delivered in the order they were sent.** Their responses may come
+   back in any order, because the target may handle requests concurrently. A target that must apply requests in order,
+   such as `net` for `net.send` to one peer, handles them in arrival order.
 
 ## Flow control
 
@@ -130,7 +130,7 @@ local queues bounded.
 
 ### 2. Credit window for notifications
 
-- For each subdaemon, `rbtcd` tracks the bytes of notifications (events and one-way RPCs) it has delivered but that have
+- For each subdaemon, `rbtcd` tracks the bytes of notifications (events) it has delivered but that have
   not yet been acknowledged.
 - `rbtcd` delivers a notification only while that number is below `event_window` (default 32 MiB).
   A notification larger than the whole window is delivered when nothing else is outstanding.
@@ -141,9 +141,10 @@ local queues bounded.
 
 ### 3. Pausing sources
 
-- A subdaemon that takes input from outside the bus declares `"source": true` in its manifest. In v0.1 only `net` does.
+- A source is a daemon that takes input from outside the bus. In v0.1 only `net` is one.
 - When any subdaemon's waiting queue in `rbtcd` passes `queue_high_water` (default 64 MiB), `rbtcd` sends `bus.pause` to
-  every source. When every queue is back below half of `queue_high_water`, it sends `bus.resume`.
+  every daemon. When every queue is back below half of `queue_high_water`, it sends `bus.resume`. Daemons that take no
+  outside input ignore both.
 - A paused source stops taking new external input. `net` stops reading from peer sockets, which pushes back on peers
   through TCP. A paused source still handles requests and notifications and may still emit events.
   Emitting an event never blocks.
@@ -155,21 +156,25 @@ local queues bounded.
 - `rbtcd` allows at most `rpc_in_flight` (default 64) outstanding requests from one caller to one target.
   Beyond that it answers at once with error `busy`, without forwarding.
 - The operator socket counts as one caller.
+- A caller that sends many requests without waiting, such as `block-sync` calling `net.send`, keeps at most
+  `rpc_in_flight` of them outstanding to one target and queues the rest itself. It then never gets `busy`, and the
+  order of its requests is kept.
 - Hook calls do not count against the limit: a hook has one outstanding call per emitter request.
 
 ## Bus control messages
 
-| Message | Shape | Direction | Params | Purpose |
+| Message | Shape | Direction | Params (result) | Purpose |
 |---|---|---|---|---|
-| `bus.init` | request | sub → main | the manifest ([manifest.md](manifest.md)) | Register. The response is the go-ahead to initialise. |
-| `bus.ready` | notification | sub → main | `{}` | Initialisation done; RPCs may now be routed to this daemon. |
-| `bus.start` | notification | main → sub | `{}` | Every daemon is ready; events may flow and sources may start taking input. |
-| `bus.ack` | notification | sub → main | `{"count": u32}` | Return credit for handled notifications. |
-| `bus.pause` | notification | main → source | `{}` | Stop taking external input. |
-| `bus.resume` | notification | main → source | `{}` | Resume taking external input. |
-| `bus.shutdown` | request | main → sub | `{}` | Finish or abandon current work, flush, answer, exit. |
+| `bus.init` | request | sub → main | `InitParams` (`InitResult`) | Register. The response is the go-ahead to initialise. |
+| `bus.ready` | notification | sub → main | `Empty` | Initialisation done; RPCs may now be routed to this daemon. |
+| `bus.start` | notification | main → sub | `Empty` | Every daemon is ready; events may flow and sources may start taking input. |
+| `bus.ack` | notification | sub → main | `AckParams` | Return credit for handled notifications. |
+| `bus.pause` | notification | main → sub | `Empty` | Stop taking external input (ignored by daemons without any). |
+| `bus.resume` | notification | main → sub | `Empty` | Resume taking external input. |
+| `bus.shutdown` | request | main → sub | `Empty` (`Empty`) | Finish or abandon current work, flush, answer, exit. |
 
-Sequences are in [lifecycle.md](lifecycle.md).
+Params and results are defined in [bus/control.json](../schemas/bus/control.json); the manifest is in
+[bus/manifest.json](../schemas/bus/manifest.json). Sequences are in [lifecycle.md](lifecycle.md).
 
 ## Timeouts
 

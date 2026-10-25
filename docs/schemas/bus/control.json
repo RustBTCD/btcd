@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Bus control messages",
+  "description": "Params and results of the bus.* messages. bus.init: request, params InitParams, result InitResult. bus.ready, bus.start, bus.pause, bus.resume: notifications, params Empty. bus.ack: notification, params AckParams. bus.shutdown: request, params and result Empty.",
+  "$defs": {
+    "InitParams": {"$ref": "manifest.json#/$defs/Manifest", "description": "bus.init params: the daemon's manifest."},
+    "InitResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "rbtcd's answer to bus.init when the registry is valid and it is this daemon's turn to initialise.",
+      "required": ["network", "datadir", "config", "node_version"],
+      "properties": {
+        "network": {"$ref": "../common.json#/$defs/Network"},
+        "datadir": {"type": "string", "description": "The daemon's own data directory, already created. The daemon must not write outside it."},
+        "config": {
+          "description": "The daemon's section of the config file as a JSON object, unvalidated. The daemon applies defaults and rejects unknown keys and invalid values."
+        },
+        "node_version": {"type": "string", "description": "Version of rbtcd."}
+      },
+      "examples": [
+        {"network": "main", "datadir": "/home/alice/.rbtc/main/chain", "config": {"assume_valid": "default"}, "node_version": "0.1.0"}
+      ]
+    },
+    "AckParams": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "bus.ack params: the next count notifications are handled; rbtcd returns their credit.",
+      "required": ["count"],
+      "properties": {"count": {"type": "integer", "minimum": 1, "maximum": 4294967295}},
+      "examples": [{"count": 64}]
+    },
+    "Empty": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "No members.",
+      "examples": [{}]
+    }
+  }
+}

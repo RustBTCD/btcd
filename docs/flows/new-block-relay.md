@@ -71,7 +71,7 @@ sequenceDiagram
     participant C as chain
     P->>N: getdata witness_block H
     N-)BS: net.getdata_blocks (P3, [witness_block H])
-    BS->>C: chain.block (H, verbosity 0)
+    BS->>C: chain.raw_block (H)
     C-->>BS: hex, in_active_chain true
     BS-)N: net.send block (witness true) to P3
     N->>P: block H

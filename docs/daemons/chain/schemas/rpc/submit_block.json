@@ -1,0 +1,43 @@
+{
+  "rpc": "chain.submit_block",
+  "description": "Validate, store and possibly connect a block.",
+  "operator": false,
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["block", "requested"],
+    "properties": {
+      "block": {"$ref": "../../../../schemas/common.json#/$defs/BlockHex"},
+      "requested": {"type": "boolean", "description": "Whether block-sync asked for this block."},
+      "peer": {"$ref": "../../../../schemas/common.json#/$defs/PeerId", "description": "The sending peer, for logs."}
+    }
+  },
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["status", "hash", "tip"],
+    "properties": {
+      "status": {
+        "type": "string",
+        "enum": ["connected", "stored", "duplicate", "unconnected", "ignored"],
+        "description": "connected: stored and now on the active chain. stored: stored, not (yet) on the active chain. duplicate: already stored. unconnected: the parent header is unknown. ignored: unrequested and not useful."
+      },
+      "hash": {"$ref": "../../../../schemas/common.json#/$defs/Hash", "description": "The submitted block."},
+      "tip": {"$ref": "../../../../schemas/common.json#/$defs/BlockRef", "description": "The active tip after the call."}
+    }
+  },
+  "examples": [
+    {
+      "request": {
+        "block": "010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e362990101000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000",
+        "requested": true,
+        "peer": 7
+      },
+      "response": {
+        "status": "connected",
+        "hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+        "tip": {"hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", "height": 1}
+      }
+    }
+  ]
+}

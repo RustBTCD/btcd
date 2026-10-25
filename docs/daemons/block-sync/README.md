@@ -92,7 +92,7 @@ Timeouts disconnect but do not discourage the peer.
 - `net.getheaders`: ignored during IBD, as Core does. Otherwise `chain.headers_after` with the locator and stop hash,
   then `net.send` a `headers` message.
 - `net.getdata_blocks`: items are queued per peer and served one at a time in order. For each:
-  `chain.block` with verbosity 0; if the block is on the active chain, `net.send` a `block` message with
+  `chain.raw_block`; if the block is on the active chain, `net.send` a `block` message with
   `witness: false` for `block` items and `true` for `witness_block` and `cmpct_block` items.
   Blocks not on the active chain, or not stored, are skipped silently, as Core does. A peer's queue is dropped on
   disconnect.
@@ -114,12 +114,10 @@ The peer's best known block becomes the new tip.
 
 | | |
 |---|---|
-| source | no |
 | subscribes | `net.peer_connected`, `net.peer_disconnected`, `net.headers`, `net.inv_blocks`, `net.block`, `net.getheaders`, `net.getdata_blocks`, `net.sendheaders`, `chain.tip_changed` |
 | emits events | — |
-| emits hooks | — |
 | serves RPCs | [rpc.md](rpc.md) |
-| calls | `chain.submit_headers`, `chain.submit_block`, `chain.locator`, `chain.missing_blocks`, `chain.headers_after`, `chain.block`, `chain.info`, `net.send`, `net.disconnect`, `net.misbehaving` |
+| calls | `chain.submit_headers`, `chain.submit_block`, `chain.locator`, `chain.missing_blocks`, `chain.headers_after`, `chain.raw_block`, `chain.info`, `net.send`, `net.disconnect`, `net.misbehaving` |
 
 ## Configuration
 

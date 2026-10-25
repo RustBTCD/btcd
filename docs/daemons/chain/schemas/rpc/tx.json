@@ -1,0 +1,58 @@
+{
+  "rpc": "chain.tx",
+  "description": "A transaction from a given block. Without a transaction index the block must be named, as Core's getrawtransaction with a block hash.",
+  "operator": true,
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["txid", "block"],
+    "properties": {
+      "txid": {"$ref": "../../../../schemas/common.json#/$defs/Hash"},
+      "block": {"$ref": "../../../../schemas/common.json#/$defs/BlockId"}
+    }
+  },
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["tx", "block", "index", "confirmations"],
+    "properties": {
+      "tx": {"$ref": "../types.json#/$defs/TxInfo"},
+      "block": {"$ref": "../../../../schemas/common.json#/$defs/BlockRef", "description": "The block containing the transaction."},
+      "index": {"type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Position in the block."},
+      "confirmations": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 4294967295,
+        "description": "0 if the block is not on the active chain."
+      }
+    }
+  },
+  "examples": [
+    {
+      "request": {"txid": "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098", "block": "1"},
+      "response": {
+        "tx": {
+          "txid": "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098",
+          "wtxid": "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098",
+          "version": 1,
+          "locktime": 0,
+          "size": 134,
+          "vsize": 134,
+          "weight": 536,
+          "inputs": [{"prevout": null, "coinbase": "04ffff001d0104", "sequence": 4294967295, "witness": []}],
+          "outputs": [
+            {
+              "n": 0,
+              "amount": 5000000000,
+              "script_pubkey": "410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac"
+            }
+          ],
+          "hex": "01000000010000000000000000000000000000000000000000000000000000000000000000ffffffff0704ffff001d0104ffffffff0100f2052a0100000043410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac00000000"
+        },
+        "block": {"hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", "height": 1},
+        "index": 0,
+        "confirmations": 1
+      }
+    }
+  ]
+}

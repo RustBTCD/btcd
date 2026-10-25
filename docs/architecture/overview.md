@@ -51,7 +51,7 @@ flowchart LR
     chain -. "tip_changed" .-> bs
     chain -. "tip_changed" .-> net
 
-    bs == "submit_headers, submit_block<br/>locator, missing_blocks<br/>headers_after, block, info" ==> chain
+    bs == "submit_headers, submit_block<br/>locator, missing_blocks<br/>headers_after, raw_block, info" ==> chain
     bs == "send, disconnect, misbehaving" ==> net
     chain == "info, connect_block<br/>disconnect_block" ==> utxo
 ```

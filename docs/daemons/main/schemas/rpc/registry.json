@@ -1,0 +1,93 @@
+{
+  "rpc": "node.registry",
+  "description": "The whole registry, for debugging: every manifest, who emits and receives each event and hook, the dependency graph and the startup order.",
+  "operator": true,
+  "request": {"type": "object", "additionalProperties": false},
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["daemons", "events", "hooks", "dependencies", "start_order"],
+    "properties": {
+      "daemons": {"type": "array", "items": {"$ref": "../../../../schemas/bus/manifest.json#/$defs/Manifest"}},
+      "events": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "emitter", "subscribers"],
+          "properties": {
+            "name": {"$ref": "../../../../schemas/bus/manifest.json#/$defs/FullName"},
+            "emitter": {"$ref": "../../../../schemas/bus/manifest.json#/$defs/DaemonName"},
+            "subscribers": {"type": "array", "items": {"$ref": "../../../../schemas/bus/manifest.json#/$defs/DaemonName"}}
+          }
+        }
+      },
+      "hooks": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "emitter", "subscribers"],
+          "properties": {
+            "name": {"$ref": "../../../../schemas/bus/manifest.json#/$defs/ShortName"},
+            "emitter": {"$ref": "../../../../schemas/bus/manifest.json#/$defs/DaemonName"},
+            "subscribers": {
+              "type": "array",
+              "items": {"$ref": "../../../../schemas/bus/manifest.json#/$defs/DaemonName"},
+              "description": "In calling order."
+            }
+          }
+        }
+      },
+      "dependencies": {
+        "type": "array",
+        "description": "The dependency graph: for each daemon, the daemons whose RPCs it calls or whose hooks it emits to.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["daemon", "depends_on"],
+          "properties": {
+            "daemon": {"$ref": "../../../../schemas/bus/manifest.json#/$defs/DaemonName"},
+            "depends_on": {"type": "array", "items": {"$ref": "../../../../schemas/bus/manifest.json#/$defs/DaemonName"}}
+          }
+        }
+      },
+      "start_order": {
+        "type": "array",
+        "items": {"$ref": "../../../../schemas/bus/manifest.json#/$defs/DaemonName"},
+        "description": "Initialisation order; shutdown runs in reverse."
+      }
+    }
+  },
+  "examples": [
+    {
+      "request": {},
+      "response": {
+        "daemons": [
+          {
+            "name": "utxo",
+            "version": "0.1.0",
+            "protocol": 1,
+            "subscribes": {"events": [], "hooks": []},
+            "emits": {"events": []},
+            "rpcs": [{"name": "info", "description": "UTXO tip and set statistics.", "operator": true, "params": []}],
+            "calls": []
+          },
+          {
+            "name": "chain",
+            "version": "0.1.0",
+            "protocol": 1,
+            "subscribes": {"events": [], "hooks": []},
+            "emits": {"events": [{"name": "block_connected", "description": "A block was connected to the active chain."}]},
+            "rpcs": [{"name": "info", "description": "Tip, best header and IBD state.", "operator": true, "params": []}],
+            "calls": ["utxo.info"]
+          }
+        ],
+        "events": [{"name": "chain.block_connected", "emitter": "chain", "subscribers": []}],
+        "hooks": [{"name": "peer_connected", "emitter": "net", "subscribers": []}],
+        "dependencies": [{"daemon": "utxo", "depends_on": []}, {"daemon": "chain", "depends_on": ["utxo"]}],
+        "start_order": ["utxo", "chain"]
+      }
+    }
+  ]
+}

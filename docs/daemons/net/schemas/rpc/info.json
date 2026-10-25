@@ -1,0 +1,67 @@
+{
+  "rpc": "net.info",
+  "description": "Listening state, connection counts and traffic totals.",
+  "operator": true,
+  "request": {"type": "object", "additionalProperties": false},
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+      "listening",
+      "local_addresses",
+      "protocol_version",
+      "user_agent",
+      "services",
+      "connections",
+      "known_addresses",
+      "bytes_sent",
+      "bytes_received",
+      "paused"
+    ],
+    "properties": {
+      "listening": {"type": "boolean"},
+      "local_addresses": {
+        "type": "array",
+        "items": {"type": "string"},
+        "description": "Addresses net listens on, ip:port."
+      },
+      "protocol_version": {"type": "integer"},
+      "user_agent": {"type": "string"},
+      "services": {
+        "$ref": "../../../../schemas/common.json#/$defs/Services",
+        "description": "Services this node advertises."
+      },
+      "connections": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["inbound", "outbound", "manual"],
+        "properties": {
+          "inbound": {"type": "integer", "minimum": 0},
+          "outbound": {"type": "integer", "minimum": 0},
+          "manual": {"type": "integer", "minimum": 0}
+        }
+      },
+      "known_addresses": {"type": "integer", "minimum": 0, "description": "Entries in the address list."},
+      "bytes_sent": {"type": "integer", "minimum": 0},
+      "bytes_received": {"type": "integer", "minimum": 0},
+      "paused": {"type": "boolean", "description": "Whether net is paused by bus.pause."}
+    }
+  },
+  "examples": [
+    {
+      "request": {},
+      "response": {
+        "listening": true,
+        "local_addresses": ["0.0.0.0:8333", "[::]:8333"],
+        "protocol_version": 70016,
+        "user_agent": "/rbtc:0.1.0/",
+        "services": {"bits": 1033, "names": ["NETWORK", "WITNESS", "NETWORK_LIMITED"]},
+        "connections": {"inbound": 12, "outbound": 8, "manual": 0},
+        "known_addresses": 15234,
+        "bytes_sent": 123456789,
+        "bytes_received": 987654321,
+        "paused": false
+      }
+    }
+  ]
+}

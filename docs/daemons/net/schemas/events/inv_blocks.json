@@ -1,0 +1,19 @@
+{
+  "event": "net.inv_blocks",
+  "description": "The block items of an inv message.",
+  "payload": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["peer", "hashes"],
+    "properties": {
+      "peer": {"$ref": "../../../../schemas/common.json#/$defs/PeerId", "description": "The peer."},
+      "hashes": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 50000,
+        "items": {"$ref": "../../../../schemas/common.json#/$defs/Hash"}
+      }
+    }
+  },
+  "examples": [{"peer": 7, "hashes": ["00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048"]}]
+}

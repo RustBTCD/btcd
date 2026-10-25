@@ -1,0 +1,17 @@
+{
+  "event": "net.peer_disconnected",
+  "description": "The connection to a peer closed. Last event about this peer.",
+  "payload": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["peer", "reason"],
+    "properties": {
+      "peer": {"$ref": "../../../../schemas/common.json#/$defs/PeerId", "description": "The peer."},
+      "reason": {
+        "type": "string",
+        "description": "Free text for logs, for example timeout, misbehaving: <reason>, closed by peer."
+      }
+    }
+  },
+  "examples": [{"peer": 7, "reason": "closed by peer"}]
+}

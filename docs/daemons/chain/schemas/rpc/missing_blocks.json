@@ -1,0 +1,34 @@
+{
+  "rpc": "chain.missing_blocks",
+  "description": "Blocks block-sync should download next: blocks on the most-work valid header chain, above the fork point with the active chain, whose bodies are not stored, within the window. Ascending height; empty when the active tip is the best header.",
+  "operator": false,
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "limit": {"type": "integer", "minimum": 1, "maximum": 4294967295, "default": 1024, "description": "Maximum entries."},
+      "window": {
+        "type": "integer",
+        "minimum": 1,
+        "maximum": 4294967295,
+        "default": 1024,
+        "description": "Only blocks at most this many heights above the active tip."
+      }
+    }
+  },
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["blocks"],
+    "properties": {
+      "blocks": {"type": "array", "items": {"$ref": "../../../../schemas/common.json#/$defs/BlockRef"}}
+    }
+  },
+  "examples": [
+    {
+      "request": {"limit": 16},
+      "response": {"blocks": [{"hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", "height": 1}]}
+    },
+    {"request": {}, "response": {"blocks": []}}
+  ]
+}

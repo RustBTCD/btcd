@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Bus envelope",
+  "description": "The JSON-RPC 2.0 shapes of every message on the bus and the operator socket. One message is one JSON object per line.",
+  "$defs": {
+    "Request": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Used for RPC calls, hook calls, bus.init and bus.shutdown. Answered by exactly one Response with the same id.",
+      "required": ["jsonrpc", "id", "method", "params"],
+      "properties": {
+        "jsonrpc": {"const": "2.0"},
+        "id": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Chosen by the sender, unique among its outstanding requests on the connection. rbtcd assigns its own id when forwarding."
+        },
+        "method": {"$ref": "#/$defs/Method"},
+        "params": {"description": "Always a JSON object (named parameters only); its schema is the RPC's, hook's or control message's."},
+        "from": {
+          "type": "string",
+          "description": "Set by rbtcd on requests it delivers: the caller's daemon name, operator, or node. Subdaemons do not set it."
+        }
+      },
+      "examples": [
+        {"jsonrpc": "2.0", "id": 17, "method": "chain.info", "params": {}},
+        {"jsonrpc": "2.0", "id": 901, "method": "chain.info", "params": {}, "from": "block-sync"}
+      ]
+    },
+    "Notification": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Used for events and bus control messages. Never answered.",
+      "required": ["jsonrpc", "method", "params"],
+      "properties": {
+        "jsonrpc": {"const": "2.0"},
+        "method": {"$ref": "#/$defs/Method"},
+        "params": {"description": "Always a JSON object; its schema is the event's or control message's."}
+      },
+      "examples": [
+        {
+          "jsonrpc": "2.0",
+          "method": "chain.block_disconnected",
+          "params": {"hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", "height": 1}
+        }
+      ]
+    },
+    "Response": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The answer to a Request. It has exactly one of result and error.",
+      "required": ["jsonrpc", "id"],
+      "minProperties": 3,
+      "maxProperties": 3,
+      "properties": {
+        "jsonrpc": {"const": "2.0"},
+        "id": {"type": "integer", "minimum": 0, "description": "The id of the request it answers."},
+        "result": {"description": "The result; its schema is the RPC's, hook's or control message's."},
+        "error": {"$ref": "#/$defs/Error"}
+      },
+      "examples": [
+        {"jsonrpc": "2.0", "id": 17, "result": {}},
+        {
+          "jsonrpc": "2.0",
+          "id": 18,
+          "error": {"code": 10, "message": "no block at height 99999999 on the active chain", "data": {"reason": "unknown-block"}}
+        }
+      ]
+    },
+    "Error": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A failed request. Codes are listed in docs/architecture/rpc.md.",
+      "required": ["code", "message"],
+      "properties": {
+        "code": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+        "message": {"type": "string", "description": "Human-readable text."},
+        "data": {"description": "Machine-readable detail, usually an object with a reason field."}
+      },
+      "examples": [{"code": 2, "message": "chain is not ready"}]
+    },
+    "Method": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9_]*$",
+      "description": "<daemon>.<rpc>, <emitter>.<event>, node.<rpc>, hook.<hook> or bus.<message>."
+    }
+  }
+}

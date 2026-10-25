@@ -1,0 +1,83 @@
+{
+  "rpc": "net.peers",
+  "description": "Connected peers.",
+  "operator": true,
+  "request": {"type": "object", "additionalProperties": false},
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["peers"],
+    "properties": {
+      "peers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "peer",
+            "addr",
+            "inbound",
+            "conn_type",
+            "services",
+            "version",
+            "user_agent",
+            "start_height",
+            "relay",
+            "connected_at",
+            "last_send",
+            "last_recv",
+            "bytes_sent",
+            "bytes_received",
+            "ping_ms"
+          ],
+          "properties": {
+            "peer": {"$ref": "../../../../schemas/common.json#/$defs/PeerId"},
+            "addr": {"type": "string", "description": "ip:port."},
+            "inbound": {"type": "boolean"},
+            "conn_type": {"$ref": "../types.json#/$defs/ConnType"},
+            "services": {"$ref": "../../../../schemas/common.json#/$defs/Services"},
+            "version": {"type": "integer"},
+            "user_agent": {"type": "string"},
+            "start_height": {"$ref": "../../../../schemas/common.json#/$defs/Height"},
+            "relay": {"type": "boolean", "description": "The relay flag of the peer's version message."},
+            "connected_at": {"$ref": "../../../../schemas/common.json#/$defs/Timestamp"},
+            "last_send": {"$ref": "../../../../schemas/common.json#/$defs/Timestamp"},
+            "last_recv": {"$ref": "../../../../schemas/common.json#/$defs/Timestamp"},
+            "bytes_sent": {"type": "integer", "minimum": 0},
+            "bytes_received": {"type": "integer", "minimum": 0},
+            "ping_ms": {
+              "oneOf": [{"type": "integer", "minimum": 0}, {"type": "null"}],
+              "description": "Last ping round trip; null until the first pong."
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "request": {},
+      "response": {
+        "peers": [
+          {
+            "peer": 7,
+            "addr": "203.0.113.5:8333",
+            "inbound": false,
+            "conn_type": "outbound_full_relay",
+            "services": {"bits": 3081, "names": ["NETWORK", "WITNESS", "NETWORK_LIMITED", "P2P_V2"]},
+            "version": 70016,
+            "user_agent": "/Satoshi:31.0.0/",
+            "start_height": 850000,
+            "relay": true,
+            "connected_at": 1718000000,
+            "last_send": 1718000500,
+            "last_recv": 1718000501,
+            "bytes_sent": 12345,
+            "bytes_received": 67890,
+            "ping_ms": null
+          }
+        ]
+      }
+    }
+  ]
+}

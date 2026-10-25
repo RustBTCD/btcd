@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Common types",
+  "description": "Types shared by several daemons. Prose descriptions are in docs/architecture/types.md.",
+  "$defs": {
+    "Hash": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Block hash, txid or wtxid: 64 lowercase hex characters in the byte order Bitcoin Core displays (reversed)."
+    },
+    "Hex": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{2})*$",
+      "description": "Lowercase hex of bytes, no 0x prefix."
+    },
+    "Height": {"type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Block height."},
+    "PeerId": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Peer id assigned by net, unique for the lifetime of the net process and never reused."
+    },
+    "Amount": {
+      "type": "integer",
+      "minimum": -9223372036854775808,
+      "maximum": 9223372036854775807,
+      "description": "Satoshis. Never BTC as a decimal."
+    },
+    "Work": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "description": "Cumulative chain work as 64 hex characters, as Core's chainwork."
+    },
+    "Timestamp": {"type": "integer", "minimum": 0, "description": "Unix time in seconds."},
+    "Network": {"type": "string", "enum": ["main", "testnet4", "signet", "regtest"]},
+    "Services": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "P2P service flags.",
+      "required": ["bits", "names"],
+      "properties": {
+        "bits": {"type": "integer", "minimum": 0, "description": "The service bits."},
+        "names": {
+          "type": "array",
+          "items": {"type": "string"},
+          "description": "Names of the known bits, as Core prints them: NETWORK, WITNESS, NETWORK_LIMITED, P2P_V2, …"
+        }
+      }
+    },
+    "BlockId": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{64}|[0-9]{1,10})$",
+      "description": "A Hash, or a decimal height on the active chain. 64 hex characters is a hash, digits is a height."
+    },
+    "HeaderHex": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{160}$",
+      "description": "The 80-byte header in consensus encoding, as hex."
+    },
+    "BlockHex": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{2})+$",
+      "description": "A block in consensus encoding with witness data, as hex."
+    },
+    "TxHex": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{2})+$",
+      "description": "A transaction in consensus encoding, with witness data if it has any, as hex."
+    },
+    "Outpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A transaction output.",
+      "required": ["txid", "vout"],
+      "properties": {
+        "txid": {"$ref": "#/$defs/Hash"},
+        "vout": {"type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Output index."}
+      }
+    },
+    "BlockRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A block by hash and height.",
+      "required": ["hash", "height"],
+      "properties": {"hash": {"$ref": "#/$defs/Hash"}, "height": {"$ref": "#/$defs/Height"}}
+    }
+  }
+}

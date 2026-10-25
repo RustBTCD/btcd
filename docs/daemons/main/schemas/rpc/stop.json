@@ -1,0 +1,8 @@
+{
+  "rpc": "node.stop",
+  "description": "Orderly shutdown. Operator only. Returns {} and then starts the shutdown.",
+  "operator": true,
+  "request": {"type": "object", "additionalProperties": false},
+  "response": {"type": "object", "additionalProperties": false},
+  "examples": [{"request": {}, "response": {}}]
+}

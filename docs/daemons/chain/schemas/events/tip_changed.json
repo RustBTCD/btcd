@@ -1,0 +1,56 @@
+{
+  "event": "chain.tip_changed",
+  "description": "The active tip moved. Emitted once after bus.start with the current tip and empty lists, then after every activation that changed the tip.",
+  "payload": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["tip", "connected", "disconnected", "ibd"],
+    "properties": {
+      "tip": {
+        "oneOf": [{"$ref": "../../../../schemas/common.json#/$defs/BlockRef"}, {"type": "null"}],
+        "description": "The new tip; null only if not even genesis is connected yet."
+      },
+      "connected": {
+        "type": "array",
+        "maxItems": 128,
+        "description": "Blocks on the new active chain that were not on the previous one, ascending height. Longer runs are split into several events.",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["hash", "height", "header"],
+          "properties": {
+            "hash": {"$ref": "../../../../schemas/common.json#/$defs/Hash"},
+            "height": {"$ref": "../../../../schemas/common.json#/$defs/Height"},
+            "header": {"$ref": "../../../../schemas/common.json#/$defs/HeaderHex"}
+          }
+        }
+      },
+      "disconnected": {
+        "type": "array",
+        "items": {"$ref": "../../../../schemas/common.json#/$defs/BlockRef"},
+        "description": "Blocks on the previous active chain that are no longer on it, from the old tip downwards."
+      },
+      "ibd": {"type": "boolean", "description": "Whether the node is in initial block download."}
+    }
+  },
+  "examples": [
+    {
+      "tip": {"hash": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f", "height": 0},
+      "connected": [],
+      "disconnected": [],
+      "ibd": true
+    },
+    {
+      "tip": {"hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", "height": 1},
+      "connected": [
+        {
+          "hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+          "height": 1,
+          "header": "010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e36299"
+        }
+      ],
+      "disconnected": [],
+      "ibd": true
+    }
+  ]
+}

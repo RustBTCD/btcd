@@ -25,24 +25,10 @@ An event announces a fact that already happened.
 3. A subscriber MUST tolerate events about objects it does not know, for example an event for a peer whose
    `net.peer_connected` it did not process.
 
-### Event catalogue
+### Where events are defined
 
-| Event | Emitter | Subscribers in v0.1 | Payload summary |
-|---|---|---|---|
-| `net.peer_connected` | net | block-sync | peer id, address, direction, services, version |
-| `net.peer_disconnected` | net | block-sync | peer id, reason |
-| `net.headers` | net | block-sync | peer, headers |
-| `net.inv_blocks` | net | block-sync | peer, block hashes |
-| `net.block` | net | block-sync | peer, block |
-| `net.getheaders` | net | block-sync | peer, locator, stop hash |
-| `net.getdata_blocks` | net | block-sync | peer, requested blocks |
-| `net.sendheaders` | net | block-sync | peer |
-| `chain.block_connected` | chain | — | hash, height, prev |
-| `chain.block_disconnected` | chain | — | hash, height |
-| `chain.tip_changed` | chain | net, block-sync | new tip, blocks connected and disconnected, IBD flag |
-
-`utxo` and `block-sync` emit no events in v0.1. Full payloads are in each daemon's `events.md`:
-[net](../daemons/net/events.md), [chain](../daemons/chain/events.md).
+Each daemon lists its events, their subscribers and their schemas in its `events.md`:
+[net](../daemons/net/events.md), [chain](../daemons/chain/events.md). `utxo` and `block-sync` emit no events in v0.1.
 
 ## Hooks
 
@@ -51,15 +37,13 @@ A hook is a synchronous interception point. The emitter asks "may this happen?" 
 ### Semantics
 
 - The hook table below is fixed in `rbtcd`. A daemon cannot invent hooks.
-- Each hook has exactly one allowed emitter. The emitter sends a request `hook.<name>` and waits for the response.
+- Each hook has exactly one allowed emitter, named in the table. Manifests do not declare emitted hooks: `rbtcd` accepts
+  `hook.<name>` only from the daemon the table names. The emitter sends the request and waits for the response.
 - `rbtcd` calls the subscribers **one after another**, in the order the daemons appear in the config file.
-  Each subscriber answers either:
-  - `{"result": "continue"}`, or
-  - `{"result": "reject", "reason": "<text>"}`.
+  Each subscriber answers `continue`, or `reject` with a reason (`Answer` in [bus/hook.json](../schemas/bus/hook.json)).
 - The first `reject` ends the chain. Later subscribers are not called.
-- The emitter receives:
-  - `{"result": "continue"}` if every subscriber continued, or there are none;
-  - `{"result": "reject", "reason": "<text>", "by": "<daemon>"}` otherwise.
+- The emitter receives `continue` if every subscriber continued or there are none, otherwise the first `reject` with its
+  reason and the rejecting daemon (`Outcome` in [bus/hook.json](../schemas/bus/hook.json)).
 - If a subscriber does not answer within the hook's timeout, or answers with an error, `rbtcd` logs it and applies the
   hook's **default** for that subscriber, then continues with the next one.
 - Hook payloads are read-only. A subscriber cannot modify what it is asked about.
@@ -73,13 +57,12 @@ hooks. Every flow in this specification is complete when no daemon subscribes to
 
 ### Hook table
 
-| Hook | Emitter | When | Payload | Default | Timeout |
-|---|---|---|---|---|---|
-| `peer_connected` | net | After the peer's `version` message is accepted by `net`'s own checks, before `net` sends `verack`. | `{peer, addr, inbound, services, version, user_agent, start_height}` | `continue` | 5 s |
+The hook table is the set of files in [bus/hooks/](../schemas/bus/hooks/). Each file names the hook's emitter, when it
+is called, what a reject does, its default, its timeout and its payload. Every hook call returns the results in
+[bus/hook.json](../schemas/bus/hook.json).
 
-On `reject`:
-
-- `peer_connected`: `net` disconnects the peer without sending `verack` and logs the reason.
-  No `net.peer_connected` or `net.peer_disconnected` event is emitted for that peer.
+| Hook | Schema |
+|---|---|
+| `peer_connected` | [peer_connected.json](../schemas/bus/hooks/peer_connected.json) |
 
 No v0.1 daemon subscribes to it.

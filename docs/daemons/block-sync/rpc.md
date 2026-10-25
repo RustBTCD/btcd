@@ -1,27 +1,15 @@
 # block-sync RPCs
 
-| RPC | Operator | Callers |
+Requests and responses are defined by the schemas in [schemas/rpc/](schemas/rpc/); shared types are in
+[common.json](../../schemas/common.json).
+
+| RPC | Operator | Schema |
 |---|---|---|
-| [`block-sync.status`](#block-syncstatus) | ✓ | |
+| [`block-sync.status`](#block-syncstatus) | ✓ | [status.json](schemas/rpc/status.json) |
 
 ## `block-sync.status`
 
-Params: none.
-
-```json
-{
-  "state": "block_download",
-  "ibd": true,
-  "tip": {"hash": "<Hash>", "height": 512000},
-  "best_header": {"hash": "<Hash>", "height": 850000},
-  "sync_peer": 7,
-  "in_flight": 128,
-  "stall_timeout_secs": 4,
-  "peers": [
-    {"peer": 7, "best_known_height": 850000, "in_flight": 16, "prefers_headers": true, "serving_queue": 0}
-  ]
-}
-```
+Sync state, peers and blocks in flight.
 
 | `state` | Meaning |
 |---|---|

@@ -40,51 +40,36 @@ Readers never block ([bus-protocol.md](../../architecture/bus-protocol.md#1-read
 
 ## RPCs
 
-Namespace `node`. Callable by the operator and by every daemon.
+Namespace `node`. Callable by the operator and by every daemon. Requests and responses are defined by the schemas in
+[schemas/rpc/](schemas/rpc/); they use the manifest types in [bus/manifest.json](../../schemas/bus/manifest.json).
+
+| RPC | Schema | Purpose |
+|---|---|---|
+| [`node.status`](#nodestatus) | [status.json](schemas/rpc/status.json) | Daemons, their state and pids, uptime, network |
+| [`node.help`](#nodehelp) | [help.json](schemas/rpc/help.json) | RPC descriptions and parameters |
+| [`node.registry`](#noderegistry) | [registry.json](schemas/rpc/registry.json) | The whole registry |
+| [`node.stop`](#nodestop) | [stop.json](schemas/rpc/stop.json) | Orderly shutdown |
 
 ### `node.status`
 
-Params: none.
-
-```json
-{
-  "version": "0.1.0",
-  "network": "main",
-  "started_at": 1718000000,
-  "state": "running",
-  "paused": false,
-  "daemons": [
-    {"name": "utxo", "version": "0.1.0", "pid": 4242, "state": "running", "queued_bytes": 0, "unacked_bytes": 1024}
-  ]
-}
-```
-
-`state` is `starting`, `running` or `stopping`.
+The node's state (`starting`, `running`, `stopping`) and, for each daemon, its lifecycle state, pid and queued and
+unacknowledged notification bytes. A daemon's `version` is `null` until its `bus.init`.
 
 ### `node.help`
 
-| Param | Type | Required | Description |
-|---|---|---|---|
-| `daemon` | string | no | Limit to one daemon (`node` included). |
-| `rpc` | string | no | Limit to one RPC; requires `daemon`. |
-
-Returns a list of RPC descriptors as declared in the manifests ([manifest.md](../../architecture/manifest.md#schema)),
-filtered to what the caller may call. The `rbtc` CLI uses it to map arguments.
-
-```json
-{"rpcs": [{"name": "chain.block", "description": "…", "operator": true, "one_way": false, "params": [ … ]}]}
-```
+The RPC descriptors from the manifests, grouped by daemon (`node` for rbtcd's own RPCs) and filtered to what the caller
+may call. `daemon` and `rpc` narrow the answer. The `rbtc` CLI uses it to map arguments.
 
 Errors: `method_not_found` if the daemon or RPC does not exist.
 
 ### `node.registry`
 
-Params: none. Returns the whole registry for debugging: for each daemon its manifest; for each event its emitter and
-subscribers; for each hook its emitter and ordered subscribers; the dependency graph and the startup order.
+The whole registry, for debugging: every manifest; for each event its emitter and subscribers; for each hook its emitter
+and its subscribers in calling order; the dependency graph; the startup order.
 
 ### `node.stop`
 
-Params: none. Operator only. Returns `{}` and then starts the orderly shutdown.
+Operator only. Returns `{}` and then starts the orderly shutdown.
 
 ## Configuration
 

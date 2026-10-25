@@ -1,0 +1,44 @@
+{
+  "rpc": "chain.header",
+  "description": "A header with its index data. Works for any header in the index, including ones whose block is not stored.",
+  "operator": true,
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["block"],
+    "properties": {"block": {"$ref": "../../../../schemas/common.json#/$defs/BlockId"}}
+  },
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["header", "hex"],
+    "properties": {
+      "header": {"$ref": "../types.json#/$defs/HeaderInfo"},
+      "hex": {"$ref": "../../../../schemas/common.json#/$defs/HeaderHex"}
+    }
+  },
+  "examples": [
+    {
+      "request": {"block": "1"},
+      "response": {
+        "header": {
+          "hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+          "height": 1,
+          "prev": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+          "version": 1,
+          "merkle_root": "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098",
+          "time": 1231469665,
+          "mtp": 1231469665,
+          "bits": "1d00ffff",
+          "nonce": 2573394689,
+          "work": "0000000000000000000000000000000000000000000000000000000200020002",
+          "status": "active",
+          "have_data": true,
+          "confirmations": 1,
+          "next": null
+        },
+        "hex": "010000006fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e61bc6649ffff001d01e36299"
+      }
+    }
+  ]
+}

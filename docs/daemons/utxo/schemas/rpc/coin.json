@@ -1,0 +1,46 @@
+{
+  "rpc": "utxo.coin",
+  "description": "One unspent output, as Core's gettxout without mempool.",
+  "operator": true,
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["txid", "vout"],
+    "properties": {
+      "txid": {"$ref": "../../../../schemas/common.json#/$defs/Hash"},
+      "vout": {"type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Output index."}
+    }
+  },
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["outpoint", "amount", "script_pubkey", "height", "coinbase", "confirmations", "best_block"],
+    "properties": {
+      "outpoint": {"$ref": "../../../../schemas/common.json#/$defs/Outpoint"},
+      "amount": {"$ref": "../../../../schemas/common.json#/$defs/Amount"},
+      "script_pubkey": {"$ref": "../../../../schemas/common.json#/$defs/Hex"},
+      "address": {
+        "type": "string",
+        "description": "Present only when the script has a standard address form on the node's network."
+      },
+      "height": {"$ref": "../../../../schemas/common.json#/$defs/Height", "description": "Height of the block that created it."},
+      "coinbase": {"type": "boolean"},
+      "confirmations": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+      "best_block": {"$ref": "../../../../schemas/common.json#/$defs/BlockRef", "description": "The tip the answer refers to."}
+    }
+  },
+  "examples": [
+    {
+      "request": {"txid": "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098", "vout": 0},
+      "response": {
+        "outpoint": {"txid": "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098", "vout": 0},
+        "amount": 5000000000,
+        "script_pubkey": "410496b538e853519c726a2c91e61ec11600ae1390813a627c66fb8be7947be63c52da7589379515d4e0a604f8141781e62294721166bf621e73a82cbf2342c858eeac",
+        "height": 1,
+        "coinbase": true,
+        "confirmations": 1,
+        "best_block": {"hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", "height": 1}
+      }
+    }
+  ]
+}

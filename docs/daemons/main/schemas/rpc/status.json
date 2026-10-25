@@ -1,0 +1,56 @@
+{
+  "rpc": "node.status",
+  "description": "Daemons, their state and pids, uptime, network.",
+  "operator": true,
+  "request": {"type": "object", "additionalProperties": false},
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["version", "network", "started_at", "state", "paused", "daemons"],
+    "properties": {
+      "version": {"type": "string", "description": "Version of rbtcd."},
+      "network": {"$ref": "../../../../schemas/common.json#/$defs/Network"},
+      "started_at": {"$ref": "../../../../schemas/common.json#/$defs/Timestamp"},
+      "state": {"type": "string", "enum": ["starting", "running", "stopping"]},
+      "paused": {"type": "boolean", "description": "Whether sources are paused (bus.pause)."},
+      "daemons": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["name", "version", "pid", "state", "queued_bytes", "unacked_bytes"],
+          "properties": {
+            "name": {"$ref": "../../../../schemas/bus/manifest.json#/$defs/DaemonName"},
+            "version": {
+              "oneOf": [{"type": "string"}, {"type": "null"}],
+              "description": "From the daemon's manifest; null before its bus.init."
+            },
+            "pid": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+            "state": {
+              "type": "string",
+              "enum": ["spawned", "registered", "initialising", "ready", "running", "stopping", "stopped"]
+            },
+            "queued_bytes": {"type": "integer", "minimum": 0, "description": "Notifications waiting in rbtcd for credit."},
+            "unacked_bytes": {"type": "integer", "minimum": 0, "description": "Notifications delivered but not yet acknowledged."}
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "request": {},
+      "response": {
+        "version": "0.1.0",
+        "network": "main",
+        "started_at": 1718000000,
+        "state": "running",
+        "paused": false,
+        "daemons": [
+          {"name": "utxo", "version": "0.1.0", "pid": 4242, "state": "running", "queued_bytes": 0, "unacked_bytes": 0},
+          {"name": "chain", "version": "0.1.0", "pid": 4243, "state": "running", "queued_bytes": 0, "unacked_bytes": 1024}
+        ]
+      }
+    }
+  ]
+}

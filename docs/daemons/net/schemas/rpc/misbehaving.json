@@ -1,0 +1,16 @@
+{
+  "rpc": "net.misbehaving",
+  "description": "Disconnect the peer and discourage its address for discourage_hours.",
+  "operator": false,
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["peer", "reason"],
+    "properties": {
+      "peer": {"$ref": "../../../../schemas/common.json#/$defs/PeerId"},
+      "reason": {"type": "string", "description": "Logged and included in net.peer_disconnected."}
+    }
+  },
+  "response": {"type": "object", "additionalProperties": false},
+  "examples": [{"request": {"peer": 7, "reason": "high-hash"}, "response": {}}]
+}

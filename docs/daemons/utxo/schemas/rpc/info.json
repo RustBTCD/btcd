@@ -1,0 +1,36 @@
+{
+  "rpc": "utxo.info",
+  "description": "UTXO tip and set statistics.",
+  "operator": true,
+  "request": {"type": "object", "additionalProperties": false},
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["tip", "mtp", "coins", "total_amount", "size_on_disk"],
+    "properties": {
+      "tip": {
+        "oneOf": [{"$ref": "../../../../schemas/common.json#/$defs/BlockRef"}, {"type": "null"}],
+        "description": "The committed tip; null before genesis is connected."
+      },
+      "mtp": {
+        "oneOf": [{"$ref": "../../../../schemas/common.json#/$defs/Timestamp"}, {"type": "null"}],
+        "description": "Median time past of the tip; null before genesis is connected."
+      },
+      "coins": {"type": "integer", "minimum": 0, "description": "Unspent outputs in the set."},
+      "total_amount": {"$ref": "../../../../schemas/common.json#/$defs/Amount", "description": "Sum of all unspent outputs."},
+      "size_on_disk": {"type": "integer", "minimum": 0, "description": "Bytes used by the chainstate store."}
+    }
+  },
+  "examples": [
+    {
+      "request": {},
+      "response": {
+        "tip": {"hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", "height": 1},
+        "mtp": 1231469665,
+        "coins": 1,
+        "total_amount": 5000000000,
+        "size_on_disk": 4096
+      }
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Hook results",
+  "description": "Results of hook.<name> requests. Each subscriber answers with an Answer; the emitter receives the Outcome of the whole chain. Payloads are in hooks/<name>.json.",
+  "$defs": {
+    "Answer": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "One subscriber's answer.",
+      "required": ["result"],
+      "properties": {
+        "result": {"type": "string", "enum": ["continue", "reject"]},
+        "reason": {"type": "string", "description": "Why; present when result is reject."}
+      },
+      "examples": [{"result": "continue"}, {"result": "reject", "reason": "address on the deny list"}]
+    },
+    "Outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What the emitter receives: continue if every subscriber continued or there are none, otherwise the first reject.",
+      "required": ["result"],
+      "properties": {
+        "result": {"type": "string", "enum": ["continue", "reject"]},
+        "reason": {"type": "string", "description": "The rejecting subscriber's reason; present when result is reject."},
+        "by": {"$ref": "manifest.json#/$defs/DaemonName", "description": "The rejecting subscriber; present when result is reject."}
+      },
+      "examples": [{"result": "continue"}, {"result": "reject", "reason": "address on the deny list", "by": "peer-filter"}]
+    }
+  }
+}

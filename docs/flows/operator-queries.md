@@ -10,16 +10,16 @@ sequenceDiagram
     actor O as operator
     participant CLI as rbtc
     participant M as rbtcd
-    participant C as chain
-    O->>CLI: rbtc chain block 850000 --verbosity 0
+    participant N as net
+    O->>CLI: rbtc net disconnect 7 --reason testing
     CLI->>M: connect to <datadir>/main/rbtc.sock
-    CLI->>M: node.help {daemon: chain, rpc: block}
-    M-->>CLI: params: block (string), verbosity (integer)
-    Note over CLI: map positional "850000" → block,<br/>--verbosity 0 → verbosity
-    CLI->>M: chain.block {block: "850000", verbosity: 0}
-    Note over M: operator may call chain.block?<br/>chain ready? in-flight below limit?
-    M->>C: chain.block (from operator)
-    C-->>M: {hash, height, in_active_chain, hex}
+    CLI->>M: node.help {daemon: net, rpc: disconnect}
+    M-->>CLI: params: peer (integer), reason (string, optional)
+    Note over CLI: map positional "7" → peer,<br/>--reason testing → reason
+    CLI->>M: net.disconnect {peer: 7, reason: "testing"}
+    Note over M: operator may call net.disconnect?<br/>net ready? in-flight below limit?
+    M->>N: net.disconnect (from operator)
+    N-->>M: {}
     M-->>CLI: result
     CLI-->>O: indented JSON, exit 0
 ```
@@ -36,7 +36,7 @@ methods to the operator; a raw request on the socket gets `not_permitted`.
 | What can I call? | `rbtc help`, `rbtc help chain`, `rbtc help chain block` | rbtcd |
 | Where is the chain, is it synced? | `rbtc chain info` | chain |
 | How is the sync going? | `rbtc block-sync status` | block-sync |
-| A block by height or hash | `rbtc chain block <height or hash> [--verbosity 0]` | chain |
+| A block by height or hash | `rbtc chain block <height or hash>`, `rbtc chain raw_block <height or hash>` | chain |
 | A header | `rbtc chain header <height or hash>` | chain |
 | Forks the node knows about | `rbtc chain tips` | chain |
 | A confirmed transaction | `rbtc chain tx <txid> <block>` | chain |

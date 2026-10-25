@@ -114,10 +114,9 @@ offer `NODE_NETWORK` and `NODE_WITNESS`.
 
 | | |
 |---|---|
-| source | yes |
 | subscribes | `chain.tip_changed` |
 | emits events | [events.md](events.md) |
-| emits hooks | `peer_connected` |
+| emits hooks | `peer_connected` (fixed by the hook table, not declared) |
 | serves RPCs | [rpc.md](rpc.md) |
 | calls | — |
 

@@ -17,6 +17,7 @@ relies on; the daemon READMEs remain the authority.
 
 - Diagrams show logical messages between daemons. Every arrow physically goes through `rbtcd`
   ([bus-protocol.md](../architecture/bus-protocol.md#physical-path-of-a-message)).
-- `->>` with a reply `-->>` is an RPC. `-)` is an event or a one-way RPC.
+- `->>` with a reply `-->>` is an RPC. `-)` is an event, or an RPC whose response the caller
+  does not wait for (the response is not drawn).
 - Event names are written in full (`chain.tip_changed`); RPC names in full (`utxo.connect_block`).
 - Peers are written `P1`, `P2`, and the P2P message they exchange with `net` is shown as `net` ↔ peer arrows.

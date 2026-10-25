@@ -1,0 +1,60 @@
+{
+  "rpc": "block-sync.status",
+  "description": "Sync state, peers and blocks in flight. tip and best_header are block-sync's view from the latest chain.tip_changed and chain.submit_headers results; chain.info is authoritative.",
+  "operator": true,
+  "request": {"type": "object", "additionalProperties": false},
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["state", "ibd", "tip", "best_header", "sync_peer", "in_flight", "stall_timeout_secs", "peers"],
+    "properties": {
+      "state": {
+        "type": "string",
+        "enum": ["headers_sync", "block_download", "synced"],
+        "description": "headers_sync: waiting for headers from the sync peer. block_download: blocks between the tip and the best header are being downloaded. synced: the tip is the best header and the node is out of IBD."
+      },
+      "ibd": {"type": "boolean"},
+      "tip": {
+        "oneOf": [{"$ref": "../../../../schemas/common.json#/$defs/BlockRef"}, {"type": "null"}],
+        "description": "null before genesis is connected."
+      },
+      "best_header": {"$ref": "../../../../schemas/common.json#/$defs/BlockRef"},
+      "sync_peer": {
+        "oneOf": [{"$ref": "../../../../schemas/common.json#/$defs/PeerId"}, {"type": "null"}],
+        "description": "The IBD header sync peer; null outside IBD."
+      },
+      "in_flight": {"type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Blocks requested and not yet received."},
+      "stall_timeout_secs": {"type": "integer", "minimum": 0, "maximum": 4294967295, "description": "The current stall timeout."},
+      "peers": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["peer", "best_known_height", "in_flight", "prefers_headers", "serving_queue"],
+          "properties": {
+            "peer": {"$ref": "../../../../schemas/common.json#/$defs/PeerId"},
+            "best_known_height": {"$ref": "../../../../schemas/common.json#/$defs/Height"},
+            "in_flight": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+            "prefers_headers": {"type": "boolean", "description": "The peer sent sendheaders (BIP130)."},
+            "serving_queue": {"type": "integer", "minimum": 0, "maximum": 4294967295, "description": "getdata items waiting to be served."}
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "request": {},
+      "response": {
+        "state": "block_download",
+        "ibd": true,
+        "tip": {"hash": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f", "height": 0},
+        "best_header": {"hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", "height": 1},
+        "sync_peer": 7,
+        "in_flight": 1,
+        "stall_timeout_secs": 2,
+        "peers": [{"peer": 7, "best_known_height": 1, "in_flight": 1, "prefers_headers": true, "serving_queue": 0}]
+      }
+    }
+  ]
+}

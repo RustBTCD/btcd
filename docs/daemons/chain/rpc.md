@@ -1,131 +1,67 @@
 # chain RPCs
 
-Types are defined in [types.md](../../architecture/types.md).
+Requests and responses are defined by the schemas in [schemas/rpc/](schemas/rpc/); shared types are in
+[schemas/types.json](schemas/types.json) and [common.json](../../schemas/common.json).
 
-| RPC | Operator | Callers | Kind |
+| RPC | Operator | Kind | Schema |
 |---|---|---|---|
-| [`chain.info`](#chaininfo) | ✓ | block-sync | read |
-| [`chain.block`](#chainblock) | ✓ | block-sync | read |
-| [`chain.header`](#chainheader) | ✓ | | read |
-| [`chain.tips`](#chaintips) | ✓ | | read |
-| [`chain.tx`](#chaintx) | ✓ | | read |
-| [`chain.submit_headers`](#chainsubmit_headers) | | block-sync | write |
-| [`chain.submit_block`](#chainsubmit_block) | | block-sync | write |
-| [`chain.locator`](#chainlocator) | | block-sync | read |
-| [`chain.missing_blocks`](#chainmissing_blocks) | | block-sync | read |
-| [`chain.headers_after`](#chainheaders_after) | | block-sync | read |
+| [`chain.info`](#chaininfo) | ✓ | read | [info.json](schemas/rpc/info.json) |
+| [`chain.block`](#chainblock) | ✓ | read | [block.json](schemas/rpc/block.json) |
+| [`chain.raw_block`](#chainraw_block) | ✓ | read | [raw_block.json](schemas/rpc/raw_block.json) |
+| [`chain.header`](#chainheader) | ✓ | read | [header.json](schemas/rpc/header.json) |
+| [`chain.tips`](#chaintips) | ✓ | read | [tips.json](schemas/rpc/tips.json) |
+| [`chain.tx`](#chaintx) | ✓ | read | [tx.json](schemas/rpc/tx.json) |
+| [`chain.submit_headers`](#chainsubmit_headers) |  | write | [submit_headers.json](schemas/rpc/submit_headers.json) |
+| [`chain.submit_block`](#chainsubmit_block) |  | write | [submit_block.json](schemas/rpc/submit_block.json) |
+| [`chain.locator`](#chainlocator) |  | read | [locator.json](schemas/rpc/locator.json) |
+| [`chain.missing_blocks`](#chainmissing_blocks) |  | read | [missing_blocks.json](schemas/rpc/missing_blocks.json) |
+| [`chain.headers_after`](#chainheaders_after) |  | read | [headers_after.json](schemas/rpc/headers_after.json) |
 
 ## `chain.info`
 
-Params: none.
-
-```json
-{
-  "network": "main",
-  "tip": {"hash": "<Hash>", "height": 850000, "time": 1718000000, "mtp": 1717998000, "work": "<Work>"},
-  "best_header": {"hash": "<Hash>", "height": 850002, "work": "<Work>"},
-  "ibd": false,
-  "assume_valid": "<Hash or null>",
-  "min_chain_work": "<Work>",
-  "headers": 850002,
-  "size_on_disk": 650000000000
-}
-```
-
-`tip` is `null` before genesis is connected. `headers` counts valid headers in the index.
+Tip, best header and IBD state. `tip` is `null` before genesis is connected. `headers` counts valid headers in the
+index.
 
 ## `chain.block`
 
-| Param | Type | Required | Description |
-|---|---|---|---|
-| `block` | string | yes | BlockId: hash, or height on the active chain |
-| `verbosity` | integer | no | `0` raw, `1` decoded (default) |
-
-Verbosity 0:
-
-```json
-{"hash": "<Hash>", "height": 850000, "in_active_chain": true, "hex": "<BlockHex>"}
-```
-
-Verbosity 1: every field of `HeaderInfo`, plus:
-
-```json
-{"size": 1534567, "stripped_size": 812345, "weight": 3991234, "tx_count": 3456, "txids": ["<Hash>"]}
-```
-
-`block-sync` uses verbosity 0 to serve `getdata` and serves only blocks with `in_active_chain: true`.
+A stored block, decoded: its `HeaderInfo`, sizes, weight and transaction ids. `chain.raw_block` returns the block
+itself.
 
 Errors: `not_found` with `data.reason` `unknown-block` or `block-data-missing` (header known, body not stored).
 
+## `chain.raw_block`
+
+A stored block in consensus encoding, with its hash, height and whether it is on the active chain. `block-sync` uses it
+to serve `getdata` and serves only blocks with `in_active_chain: true`.
+
+Errors: `not_found` with `data.reason` `unknown-block` or `block-data-missing`.
+
 ## `chain.header`
 
-| Param | Type | Required | Description |
-|---|---|---|---|
-| `block` | string | yes | BlockId |
-
-Returns `HeaderInfo` plus `"hex": HeaderHex`. Works for any header in the index, including ones whose block is not
-stored.
+A header's `HeaderInfo` and its encoding. Works for any header in the index, including ones whose block is not stored.
 
 Errors: `not_found`.
 
 ## `chain.tips`
 
-Params: none. Same meaning as Core's `getchaintips`.
-
-```json
-{
-  "tips": [
-    {"hash": "<Hash>", "height": 850000, "branch_len": 0, "status": "active"},
-    {"hash": "<Hash>", "height": 849990, "branch_len": 1, "status": "valid_fork"}
-  ]
-}
-```
-
-`status`: `active`, `valid_fork`, `valid_headers`, `headers_only`, `invalid`.
+All known chain tips, with the same meaning as Core's `getchaintips`.
 
 ## `chain.tx`
 
-Find a transaction in a given block. Without a transaction index, the block must be named (as Core's `getrawtransaction`
-with a block hash).
-
-| Param | Type | Required | Description |
-|---|---|---|---|
-| `txid` | string | yes | Hash |
-| `block` | string | yes | BlockId |
-
-Returns `TxInfo` plus:
-
-```json
-{"block": {"hash": "<Hash>", "height": 850000}, "index": 17, "confirmations": 3}
-```
-
-`confirmations` is `0` if the block is not on the active chain.
+A transaction from a given block, with the block, its position and its confirmations. Without a transaction index, the
+block must be named (as Core's `getrawtransaction` with a block hash). `confirmations` is `0` if the block is not on
+the active chain.
 
 Errors: `not_found` with `data.reason` `unknown-block`, `block-data-missing` or `tx-not-in-block`.
 
 ## `chain.submit_headers`
 
-Validate and store headers received from a peer. Processing stops at the first invalid header;
-headers before it are kept.
+Validate and store headers received from a peer. Processing stops at the first invalid header; headers before it are
+kept.
 
-| Param | Type | Required | Description |
-|---|---|---|---|
-| `headers` | [string] | yes | HeaderHex list in chain order, each extending the previous; the first extends a known header |
-| `peer` | integer | no | PeerId, for logs |
-
-```json
-{
-  "status": "ok",
-  "new": 2000,
-  "last": {"hash": "<Hash>", "height": 2000},
-  "best_header": {"hash": "<Hash>", "height": 2000, "work": "<Work>"}
-}
-```
-
-| `status` | Meaning |
-|---|---|
-| `ok` | Every header is valid. `new` counts headers that were not known before. `last` is the last header of the list. |
-| `unconnected` | The first header's parent is unknown. Nothing was stored. The caller should send `getheaders` with a fresh locator. |
+- `ok`: every header is valid. `new` counts headers that were not known before; `last` is the last header of the list.
+- `unconnected`: the first header's parent is unknown. Nothing was stored, and `last` is absent. The caller should send
+  `getheaders` with a fresh locator.
 
 Errors: `invalid` with `data` `{"reason": <Core reason>, "hash": Hash, "index": <position in list>}`;
 for example `high-hash`, `bad-diffbits`, `time-too-old`, `time-too-new`, `bad-version`, `bad-prevblk`.
@@ -133,15 +69,7 @@ Also `invalid_params` for headers that do not chain to each other.
 
 ## `chain.submit_block`
 
-| Param | Type | Required | Description |
-|---|---|---|---|
-| `block` | string | yes | BlockHex |
-| `requested` | boolean | yes | Whether block-sync asked for this block |
-| `peer` | integer | no | PeerId, for logs |
-
-```json
-{"status": "connected", "hash": "<Hash>", "tip": {"hash": "<Hash>", "height": 850001}}
-```
+Validate, store and possibly connect a block. `status` is one of:
 
 | `status` | Meaning |
 |---|---|
@@ -158,36 +86,19 @@ is now marked as having an invalid parent. Failures of unrelated blocks are only
 
 ## `chain.locator`
 
-| Param | Type | Required | Description |
-|---|---|---|---|
-| `from` | string | no | Hash to start from; default the best header |
+A block locator: the starting hash (default the best header), then the previous 10 hashes, then exponentially larger
+steps back to genesis (Core's `GetLocator`).
 
-Returns `{"locator": [Hash]}`: the starting hash, then the previous 10 hashes, then exponentially larger steps back to
-genesis (Core's `GetLocator`). Error: `not_found`.
+Errors: `not_found`.
 
 ## `chain.missing_blocks`
 
-Blocks block-sync should download next.
-
-| Param | Type | Required | Description |
-|---|---|---|---|
-| `limit` | integer | no | Maximum entries, default 1024 |
-| `window` | integer | no | Only blocks at most this many heights above the active tip, default 1024 |
-
-Returns `{"blocks": [BlockRef]}` in ascending height: the blocks on the most-work valid header chain, above the fork
-point with the active chain, whose bodies are not stored, within the window. Empty when the active tip is the best
-header.
+Blocks block-sync should download next, in ascending height: the blocks on the most-work valid header chain, above the
+fork point with the active chain, whose bodies are not stored, within the window above the active tip. Empty when the
+active tip is the best header.
 
 ## `chain.headers_after`
 
-Serve a peer's `getheaders` from the active chain, as Core does.
-
-| Param | Type | Required | Description |
-|---|---|---|---|
-| `locator` | [string] | yes | Hashes |
-| `stop` | string | no | Hash; stop after this header |
-| `max` | integer | no | Default and maximum 2000 |
-
-Starting point: the first locator hash that is on the active chain, or genesis if none is.
-Returns `{"headers": [HeaderHex]}` that follow it on the active chain. An empty locator returns only the `stop` header,
-if known.
+Serve a peer's `getheaders` from the active chain, as Core does. Starting point: the first locator hash that is on the
+active chain, or genesis if none is. Returns the headers that follow it on the active chain, up to `stop` or `max`.
+An empty locator returns only the `stop` header, if known.

@@ -1,0 +1,37 @@
+{
+  "event": "net.peer_connected",
+  "description": "The handshake with a peer completed and hook.peer_connected did not reject it.",
+  "payload": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["peer", "addr", "inbound", "conn_type", "services", "version", "user_agent", "start_height"],
+    "properties": {
+      "peer": {"$ref": "../../../../schemas/common.json#/$defs/PeerId", "description": "The peer."},
+      "addr": {"type": "string", "description": "ip:port."},
+      "inbound": {"type": "boolean"},
+      "conn_type": {"$ref": "../types.json#/$defs/ConnType"},
+      "services": {
+        "$ref": "../../../../schemas/common.json#/$defs/Services",
+        "description": "Services the peer advertised."
+      },
+      "version": {"type": "integer", "description": "Protocol version."},
+      "user_agent": {"type": "string"},
+      "start_height": {
+        "$ref": "../../../../schemas/common.json#/$defs/Height",
+        "description": "Height the peer reported."
+      }
+    }
+  },
+  "examples": [
+    {
+      "peer": 7,
+      "addr": "203.0.113.5:8333",
+      "inbound": false,
+      "conn_type": "outbound_full_relay",
+      "services": {"bits": 1033, "names": ["NETWORK", "WITNESS", "NETWORK_LIMITED"]},
+      "version": 70016,
+      "user_agent": "/Satoshi:31.0.0/",
+      "start_height": 850000
+    }
+  ]
+}

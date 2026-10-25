@@ -1,0 +1,18 @@
+{
+  "rpc": "net.connect",
+  "description": "Open a manual connection. It is reconnected if lost, until the node restarts.",
+  "operator": true,
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["addr"],
+    "properties": {"addr": {"type": "string", "description": "host:port; host may be a name."}}
+  },
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["peer"],
+    "properties": {"peer": {"$ref": "../../../../schemas/common.json#/$defs/PeerId"}}
+  },
+  "examples": [{"request": {"addr": "203.0.113.5:8333"}, "response": {"peer": 8}}]
+}

@@ -1,0 +1,105 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "chain types",
+  "description": "Types shared by chain's own RPC and event schemas.",
+  "$defs": {
+    "HeaderStatus": {
+      "type": "string",
+      "enum": ["active", "valid_fork", "valid_headers", "headers_only", "invalid"],
+      "description": "active: on the active chain. valid_fork: fully validated, not on the active chain. valid_headers: block stored and checked by chain, never connected. headers_only: block not stored. invalid: the block or an ancestor is invalid. Matches Core's getchaintips."
+    },
+    "HeaderInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "What chain knows about a header.",
+      "required": [
+        "hash", "height", "prev", "version", "merkle_root", "time", "mtp", "bits", "nonce", "work", "status", "have_data",
+        "confirmations", "next"
+      ],
+      "properties": {
+        "hash": {"$ref": "../../../schemas/common.json#/$defs/Hash"},
+        "height": {"$ref": "../../../schemas/common.json#/$defs/Height"},
+        "prev": {"$ref": "../../../schemas/common.json#/$defs/Hash", "description": "The parent header; all zeros for genesis."},
+        "version": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+        "merkle_root": {"$ref": "../../../schemas/common.json#/$defs/Hash"},
+        "time": {"$ref": "../../../schemas/common.json#/$defs/Timestamp", "description": "Header timestamp."},
+        "mtp": {"$ref": "../../../schemas/common.json#/$defs/Timestamp", "description": "Median time past."},
+        "bits": {"type": "string", "pattern": "^[0-9a-f]{8}$", "description": "The compact target as 8 hex characters."},
+        "nonce": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "work": {"$ref": "../../../schemas/common.json#/$defs/Work"},
+        "status": {"$ref": "#/$defs/HeaderStatus"},
+        "have_data": {"type": "boolean", "description": "Whether the block body is stored."},
+        "confirmations": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4294967295,
+          "description": "Relative to the active chain; 0 when not on it."
+        },
+        "next": {
+          "oneOf": [{"$ref": "../../../schemas/common.json#/$defs/Hash"}, {"type": "null"}],
+          "description": "The next block on the active chain; null for the tip or when not on the active chain."
+        }
+      }
+    },
+    "TxInfo": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A decoded transaction.",
+      "required": ["txid", "wtxid", "version", "locktime", "size", "vsize", "weight", "inputs", "outputs", "hex"],
+      "properties": {
+        "txid": {"$ref": "../../../schemas/common.json#/$defs/Hash"},
+        "wtxid": {"$ref": "../../../schemas/common.json#/$defs/Hash"},
+        "version": {"type": "integer", "minimum": -2147483648, "maximum": 2147483647},
+        "locktime": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "size": {"type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Serialized size in bytes, with witness."},
+        "vsize": {"type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Virtual size in vbytes."},
+        "weight": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "inputs": {"type": "array", "items": {"$ref": "#/$defs/TxInput"}},
+        "outputs": {"type": "array", "items": {"$ref": "#/$defs/TxOutput"}},
+        "hex": {"$ref": "../../../schemas/common.json#/$defs/TxHex"}
+      }
+    },
+    "TxInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A transaction input. A coinbase input has prevout null and coinbase instead of script_sig.",
+      "required": ["prevout", "sequence", "witness"],
+      "properties": {
+        "prevout": {
+          "oneOf": [{"$ref": "../../../schemas/common.json#/$defs/Outpoint"}, {"type": "null"}],
+          "description": "The spent output; null for a coinbase input."
+        },
+        "script_sig": {"$ref": "../../../schemas/common.json#/$defs/Hex", "description": "Present for every input except coinbase."},
+        "coinbase": {"$ref": "../../../schemas/common.json#/$defs/Hex", "description": "The coinbase script; only for a coinbase input."},
+        "sequence": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+        "witness": {"type": "array", "items": {"$ref": "../../../schemas/common.json#/$defs/Hex"}, "description": "Empty without witness."}
+      }
+    },
+    "TxOutput": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A transaction output.",
+      "required": ["n", "amount", "script_pubkey"],
+      "properties": {
+        "n": {"type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Output index."},
+        "amount": {"$ref": "../../../schemas/common.json#/$defs/Amount"},
+        "script_pubkey": {"$ref": "../../../schemas/common.json#/$defs/Hex"},
+        "address": {
+          "type": "string",
+          "description": "Present only when the script has a standard address form on the node's network."
+        }
+      }
+    },
+    "HeaderWork": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "A header with its cumulative chain work.",
+      "required": ["hash", "height", "work"],
+      "properties": {
+        "hash": {"$ref": "../../../schemas/common.json#/$defs/Hash"},
+        "height": {"$ref": "../../../schemas/common.json#/$defs/Height"},
+        "work": {"$ref": "../../../schemas/common.json#/$defs/Work"}
+      }
+    }
+  }
+}

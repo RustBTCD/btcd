@@ -1,0 +1,52 @@
+{
+  "rpc": "chain.block",
+  "description": "A stored block, decoded: its header data, sizes and transaction ids. chain.raw_block returns the block itself.",
+  "operator": true,
+  "request": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["block"],
+    "properties": {"block": {"$ref": "../../../../schemas/common.json#/$defs/BlockId"}}
+  },
+  "response": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["header", "size", "stripped_size", "weight", "tx_count", "txids"],
+    "properties": {
+      "header": {"$ref": "../types.json#/$defs/HeaderInfo"},
+      "size": {"type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Serialized size in bytes, with witness."},
+      "stripped_size": {"type": "integer", "minimum": 0, "maximum": 4294967295, "description": "Serialized size without witness."},
+      "weight": {"type": "integer", "minimum": 0, "maximum": 4294967295},
+      "tx_count": {"type": "integer", "minimum": 1, "maximum": 4294967295},
+      "txids": {"type": "array", "minItems": 1, "items": {"$ref": "../../../../schemas/common.json#/$defs/Hash"}}
+    }
+  },
+  "examples": [
+    {
+      "request": {"block": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048"},
+      "response": {
+        "header": {
+          "hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048",
+          "height": 1,
+          "prev": "000000000019d6689c085ae165831e934ff763ae46a2a6c172b3f1b60a8ce26f",
+          "version": 1,
+          "merkle_root": "0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098",
+          "time": 1231469665,
+          "mtp": 1231469665,
+          "bits": "1d00ffff",
+          "nonce": 2573394689,
+          "work": "0000000000000000000000000000000000000000000000000000000200020002",
+          "status": "active",
+          "have_data": true,
+          "confirmations": 1,
+          "next": null
+        },
+        "size": 215,
+        "stripped_size": 215,
+        "weight": 860,
+        "tx_count": 1,
+        "txids": ["0e3e2357e806b6cdb1f70b54c3a3a17b6714ee1f0e68bebb44a74b1efd512098"]
+      }
+    }
+  ]
+}

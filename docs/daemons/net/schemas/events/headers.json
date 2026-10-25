@@ -1,0 +1,27 @@
+{
+  "event": "net.headers",
+  "description": "A headers message.",
+  "payload": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["peer", "headers"],
+    "properties": {
+      "peer": {"$ref": "../../../../schemas/common.json#/$defs/PeerId", "description": "The peer."},
+      "headers": {
+        "type": "array",
+        "maxItems": 2000,
+        "items": {"$ref": "../../../../schemas/common.json#/$defs/HeaderHex"},
+        "description": "In message order, at most 2000. May be empty."
+      }
+    }
+  },
+  "examples": [
+    {
+      "peer": 7,
+      "headers": [
+        "0100000000000000000000000000000000000000000000000000000000000000000000003ba3edfd7a7b12b27ac72c3e67768f617fc81bc3888a51323a9fb8aa4b1e5e4a29ab5f49ffff001d1dac2b7c"
+      ]
+    },
+    {"peer": 7, "headers": []}
+  ]
+}

@@ -1,46 +1,22 @@
 # chain events
 
-Types are defined in [types.md](../../architecture/types.md).
+Payloads are defined by the schemas in [schemas/events/](schemas/events/); shared types are in
+[schemas/types.json](schemas/types.json) and [common.json](../../schemas/common.json).
 
 Order of emission during one activation: every `chain.block_disconnected`, then every `chain.block_connected`, then
 `chain.tip_changed`. Each event is emitted only after `utxo` has committed the change it describes.
 
-## `chain.block_connected`
-
-A block was connected to the active chain.
-
-| Field | Type | Description |
-|---|---|---|
-| `hash` | Hash | |
-| `height` | Height | |
-| `prev` | Hash | |
-
-Subscribers in v0.1: none.
-
-## `chain.block_disconnected`
-
-A block was disconnected from the tip of the active chain during a reorg.
-
-| Field | Type | Description |
-|---|---|---|
-| `hash` | Hash | |
-| `height` | Height | |
-
-Subscribers in v0.1: none.
+| Event | Schema | Subscribers | Meaning |
+|---|---|---|---|
+| `chain.block_connected` | [block_connected.json](schemas/events/block_connected.json) | — | A block was connected to the active chain. |
+| `chain.block_disconnected` | [block_disconnected.json](schemas/events/block_disconnected.json) | — | A block was disconnected from the tip of the active chain during a reorg. |
+| `chain.tip_changed` | [tip_changed.json](schemas/events/tip_changed.json) | net, block-sync | The active tip moved. |
 
 ## `chain.tip_changed`
 
-The active tip moved. Emitted once after `bus.start` with the current tip and empty lists, then after every activation
-that changed the tip ([README](README.md#best-chain-activation)).
-
-| Field | Type | Description |
-|---|---|---|
-| `tip` | BlockRef | The new tip. `null` only if not even genesis is connected yet. |
-| `connected` | [object] | Blocks on the new active chain that were not on the previous one, ascending height: `{"hash": Hash, "height": Height, "header": HeaderHex}`. At most 128; longer runs are split into several events. |
-| `disconnected` | [BlockRef] | Blocks on the previous active chain that are no longer on it, from the old tip downwards. |
-| `ibd` | bool | Whether the node is in initial block download. |
-
-Subscribers:
+Emitted once after `bus.start` with the current tip and empty lists, then after every activation that changed the tip
+([README](README.md#best-chain-activation)). `connected` lists at most 128 blocks; longer runs are split into several
+events.
 
 | Subscriber | Uses it to |
 |---|---|

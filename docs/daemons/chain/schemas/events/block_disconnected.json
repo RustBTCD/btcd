@@ -1,0 +1,14 @@
+{
+  "event": "chain.block_disconnected",
+  "description": "A block was disconnected from the tip of the active chain during a reorg, after utxo committed it.",
+  "payload": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": ["hash", "height"],
+    "properties": {
+      "hash": {"$ref": "../../../../schemas/common.json#/$defs/Hash"},
+      "height": {"$ref": "../../../../schemas/common.json#/$defs/Height"}
+    }
+  },
+  "examples": [{"hash": "00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048", "height": 1}]
+}

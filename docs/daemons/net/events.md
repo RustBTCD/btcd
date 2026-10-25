@@ -1,95 +1,19 @@
 # net events
 
-Types are defined in [types.md](../../architecture/types.md).
+Payloads are defined by the schemas in [schemas/events/](schemas/events/); shared types are in
+[schemas/types.json](schemas/types.json) and [common.json](../../schemas/common.json).
 
 Every event except `net.peer_connected` and `net.peer_disconnected` carries the decoded content of one P2P message (or
 the part of it routed to the subscriber). For a given peer, events are emitted in the order its messages arrived, after
 `net.peer_connected` and before `net.peer_disconnected`.
 
-`InvItem` is `{"type": <string>, "hash": Hash}`, with `type` one of `block`, `witness_block`, `cmpct_block`.
-
-## `net.peer_connected`
-
-The handshake with a peer completed (both `verack`s exchanged) and `hook.peer_connected` did not reject it.
-
-| Field | Type | Description |
-|---|---|---|
-| `peer` | PeerId | |
-| `addr` | string | `ip:port` |
-| `inbound` | bool | |
-| `conn_type` | string | `outbound_full_relay`, `manual`, `inbound` |
-| `services` | Services | Services the peer advertised |
-| `version` | number | Protocol version |
-| `user_agent` | string | |
-| `start_height` | Height | Height the peer reported |
-
-Subscriber: block-sync.
-
-## `net.peer_disconnected`
-
-| Field | Type | Description |
-|---|---|---|
-| `peer` | PeerId | |
-| `reason` | string | Free text for logs, for example `timeout`, `misbehaving: <reason>`, `closed by peer` |
-
-Last event about this peer. Subscriber: block-sync.
-
-## `net.headers`
-
-| Field | Type | Description |
-|---|---|---|
-| `peer` | PeerId | |
-| `headers` | [HeaderHex] | In message order, at most 2000. May be empty. |
-
-Subscriber: block-sync.
-
-## `net.inv_blocks`
-
-Block items of an `inv` message.
-
-| Field | Type | Description |
-|---|---|---|
-| `peer` | PeerId | |
-| `hashes` | [Hash] | |
-
-Subscriber: block-sync.
-
-## `net.block`
-
-| Field | Type | Description |
-|---|---|---|
-| `peer` | PeerId | |
-| `block` | BlockHex | |
-
-Subscriber: block-sync.
-
-## `net.getheaders`
-
-| Field | Type | Description |
-|---|---|---|
-| `peer` | PeerId | |
-| `locator` | [Hash] | At most 101 hashes, as Core's `MAX_LOCATOR_SZ` |
-| `stop` | Hash or null | `null` when the message has an all-zero stop hash |
-
-Subscriber: block-sync.
-
-## `net.getdata_blocks`
-
-Block items of a `getdata` message.
-
-| Field | Type | Description |
-|---|---|---|
-| `peer` | PeerId | |
-| `items` | [InvItem] | Types `block`, `witness_block`, `cmpct_block` |
-
-Subscriber: block-sync.
-
-## `net.sendheaders`
-
-The peer prefers block announcements as `headers` (BIP130).
-
-| Field | Type | Description |
-|---|---|---|
-| `peer` | PeerId | |
-
-Subscriber: block-sync.
+| Event | Schema | Subscribers | Meaning |
+|---|---|---|---|
+| `net.peer_connected` | [peer_connected.json](schemas/events/peer_connected.json) | block-sync | The handshake completed (both `verack`s exchanged) and `hook.peer_connected` did not reject the peer. |
+| `net.peer_disconnected` | [peer_disconnected.json](schemas/events/peer_disconnected.json) | block-sync | The connection closed. Last event about this peer. |
+| `net.headers` | [headers.json](schemas/events/headers.json) | block-sync | A `headers` message. |
+| `net.inv_blocks` | [inv_blocks.json](schemas/events/inv_blocks.json) | block-sync | The block items of an `inv` message. |
+| `net.block` | [block.json](schemas/events/block.json) | block-sync | A `block` message. |
+| `net.getheaders` | [getheaders.json](schemas/events/getheaders.json) | block-sync | A `getheaders` message. |
+| `net.getdata_blocks` | [getdata_blocks.json](schemas/events/getdata_blocks.json) | block-sync | The block items of a `getdata` message. |
+| `net.sendheaders` | [sendheaders.json](schemas/events/sendheaders.json) | block-sync | The peer prefers block announcements as `headers` (BIP130). |
