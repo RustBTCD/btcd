@@ -1,18 +1,9 @@
 # rbtc v0.1 specification
 
 rbtc is a Bitcoin full node built as a set of cooperating processes: one main daemon (`rbtcd`) and several subdaemons
-that talk to each other only through it.
+that talk to each other only through it. Mining and wallet functionality are out of scope.
 
-v0.1:
-
-- follows the most-work valid chain (headers-first sync, block download, full validation, reorgs);
-- relays new blocks;
-- answers operator queries about the chain, blocks, transactions and coins;
-- is reachable by the operator through one socket and one CLI: `rbtc <subdaemon> <rpc> [args] [--flags]`.
-
-Not in v0.1: transaction relay, mempool, compact blocks (BIP152), BIP324 transport, transaction index, compact block
-filters, pruning, Bitcoin Core compatible RPC, restarting individual daemons. Mining and wallet functionality are out of
-scope.
+What each version must deliver: [milestones.md](milestones.md).
 
 ## Reading order
 
@@ -38,6 +29,7 @@ scope.
 ```
 docs/
 ├── README.md                  this file
+├── milestones.md              what each version must deliver
 ├── architecture/
 │   ├── overview.md
 │   ├── bus-protocol.md
