@@ -1,115 +1,102 @@
-# Storage and consistency
+# Storage
 
-## Stores
+## Introduction
 
 A **store** is the unit of atomicity: a set of tables written together in all-or-nothing updates.
 
 - Data that MUST change atomically together MUST be in the same store.
-- Each store uses one engine. The engine is chosen per store.
-- A store belongs to exactly one daemon and lives in that daemon's data directory. No store is opened by more than one process.
-- There is no atomicity across stores, within a daemon or between daemons. Consistency across stores is defined by [write ordering](#write-ordering).
+- Data that does not need to change atomically together is kept in separate stores, so that the engine of each store can
+  be replaced independently.
+- A store belongs to exactly one module.
+- There is no atomicity across stores. Consistency across stores is defined by [write ordering](#write-ordering).
 
-### Engines
+| Module | Store        | Tables                            | Path                                   |
+|--------|--------------|-----------------------------------|----------------------------------------|
+| chain  | `chainstate` | `coins`, `undo`, `active`, `meta` | `<datadir>/<network>/chain/chainstate/` |
+| chain  | `headers`    | `headers`                         | `<datadir>/<network>/chain/headers/`   |
+| chain  | `blocks`     | `blocks`                          | `<datadir>/<network>/chain/blocks/`    |
+| net    | `peer-list`  | `peer-list`                       | `<datadir>/<network>/net/peer-list/`   |
 
-| Engine | Atomic unit | Durability |
-|---|---|---|
-| Key-value (RocksDB) | one write batch | a batch written with `sync` survives power loss; without it, it survives a process crash |
-| Flat files (append-only) | one appended record | after `fsync` of the file |
-| Single file | the whole file, replaced by writing a temporary file, `fsync`, `rename` | after the rename |
+`block-sync` has no store. Note that `headers` and `blocks` are separate stores: a block body and its header never need
+to change together.
 
-### Stores in v0.1
+### Engine
 
-| Daemon | Store | Engine | Path |
-|---|---|---|---|
-| utxo | `chainstate` | RocksDB | `<datadir>/<network>/utxo/chainstate/` |
-| chain | `index` | RocksDB | `<datadir>/<network>/chain/index/` |
-| chain | `blocks` | flat files | `<datadir>/<network>/chain/blocks/` |
-| net | `addresses` | single file | `<datadir>/<network>/net/addresses.json` |
+Every store in v0.1 is a separate RocksDB instance in its own directory. Each table has a tuning profile:
 
-`block-sync` and `tx-relay` have no stores. tx-relay's relay cache is in memory and is lost on restart.
+| Profile      | Used for                           | Settings     |
+|--------------|------------------------------------|--------------|
+| point lookup | tables read by key                 | bloom filter |
+| large values | tables of large values read by key | blob files   |
+| sequential   | tables read in key order           | —            |
 
-### utxo
+----
 
-Store `chainstate`:
+## Stores
 
-| Table | Key | Value |
-|---|---|---|
-| `coins` | outpoint | amount, scriptPubKey, height, coinbase flag |
-| `undo` | block hash | the coins the block spent, in input order |
-| `active` | height | block hash, block time, median time past |
-| `meta` | `tip` | block hash of the tip; absent before genesis is connected |
-| `meta` | `stats` | number of coins, total amount |
+## chainstate
 
-Every `utxo.connect_block` and `utxo.disconnect_block` is one write batch containing the coins added and removed, the undo data, the `active` row, `tip` and `stats`.
+| Table    | Key        | Value                                                                                   | Profile      |
+|----------|------------|-----------------------------------------------------------------------------------------|--------------|
+| `coins`  | outpoint   | amount, scriptPubKey, height, coinbase flag                                             | point lookup |
+| `undo`   | block hash | the coins the block spent (amount, scriptPubKey, height, coinbase flag), in input order | large values |
+| `active` | height     | block hash, block time and median time past of the active chain at that height          | sequential   |
+| `meta`   | `tip`      | block hash and height of the tip                                                        | —            |
 
-v0.1 writes one batch per block and keeps no in-memory coin cache.
+The UTXO set and the tip are in one store, so a block is applied or reverted together with the tip move.
 
-### chain
+## headers
 
-Store `index`:
+| Table     | Key        | Value                                                    | Profile      |
+|-----------|------------|----------------------------------------------------------|--------------|
+| `headers` | block hash | header (80 bytes), height, cumulative chain work, status | point lookup |
 
-| Table | Key | Value |
-|---|---|---|
-| `index` | block hash | header (80 bytes), height, cumulative chain work, status flags, block location (present when `have_data`) |
-| `meta` | `block_files` | number of the current block file, write offset in it |
+## blocks
 
-Status flags: `header_valid`, `have_data`, `block_valid` (passed `CheckBlock` and `ContextualCheckBlock`), `failed` (the block itself is invalid), `failed_parent` (an ancestor is invalid). A block location is `{file, offset, length}` and points at the block bytes inside a block file. The whole index is loaded into memory at startup. The active chain is not stored by `chain` ([startup reconciliation](#startup-reconciliation)).
+| Table    | Key        | Value                                               | Profile      |
+|----------|------------|-----------------------------------------------------|--------------|
+| `blocks` | block hash | block in consensus encoding, including witness data | large values |
 
-Store `blocks`:
+## peer-list
 
-- Files `blk00000.dat`, `blk00001.dat`, … in the store directory.
-- Each record is the network magic (4 bytes), the block length (u32, little-endian), and the block in consensus encoding, as in Bitcoin Core's `blk*.dat` files.
-- A file holds at most 128 MiB (Core's `MAX_BLOCKFILE_SIZE`). A record that does not fit starts the next file.
-- Records are never modified or deleted in v0.1.
+| Table       | Key                      | Value                                                                  | Profile      |
+|-------------|--------------------------|------------------------------------------------------------------------|--------------|
+| `peer-list` | peer address (`ip:port`) | features recorded for the peer ([net](../modules/net/README.md#state)) | point lookup |
 
-Storing a block body:
-
-1. Append the record at the write position recorded in `meta.block_files`, then `fsync` the file.
-2. Write one `index` batch with `sync`: the block's entry with `have_data` and its location, and `meta.block_files` advanced past the record.
-
-Bytes beyond the recorded write position belong to no block. The next append overwrites them.
-
-### net
-
-Store `addresses`: one JSON file with the known addresses and, per address, services, last seen, last success and attempt count. Rewritten every 15 minutes and at shutdown.
-
-## The tip rule
-
-`utxo`'s `meta.tip` in `chainstate` is the only persistent record of the active chain. `chain` holds the active chain in memory and rebuilds it from `utxo` at startup. No other daemon persists the tip.
+----
 
 ## Write ordering
 
-Connecting a block:
+> Note: We use 1,2,3... when the order is important and dots when not.
+> When the order is important, we assume using RockDB write in sync mode `WriteOptions::set_sync(true)`.
 
-1. `chain` stores the block body in `blocks` (appended and `fsync`ed).
-2. `chain` writes the block's `index` entry with `sync`.
-3. `chain` calls `utxo.connect_block`; `utxo` writes one `chainstate` batch. The batch does not need `sync`.
-4. After `utxo` has answered, `chain` updates its in-memory active chain and emits `chain.block_connected` and `chain.tip_changed`.
+### First start
 
-Disconnecting a block: `chain` calls `utxo.disconnect_block` (the body is already stored); after the answer it updates its in-memory active chain and emits `chain.block_disconnected`.
+- The `chain` writes the genesis: block to `blocks` and header to `headers`.
+- The `chain` writes one `chainstate` batch, updating all involved tables (`meta`, `active`, `coins`, etc.).
 
-Invariant: every block in `utxo`'s active chain has a durable `index` entry with `have_data` and a durable body in `blocks`.
+### Storing headers
 
-## Startup reconciliation
+- Write by batches into `headers`
 
-During its initialisation (after `utxo` is ready, before `bus.ready`), `chain`:
+### Connecting a block to the tip block
 
-1. Loads the `index` store into memory and determines the best header (most work, not failed). On the very first start it inserts the genesis header.
-2. Calls `utxo.info` and reads `tip`.
-3. If there is no tip, the active chain is empty. Genesis is connected during the first activation.
-4. Otherwise the tip MUST be in the index with `have_data`. The active chain is the path from the tip back to genesis through the index. If the tip is not in the index, `chain` exits with a corruption error.
-5. After `bus.start`, `chain` emits `chain.tip_changed` with the current tip and empty `connected`/`disconnected` lists, then runs best-chain activation, which connects stored blocks beyond the tip.
+1. `chain` writes the block to `blocks`.
+2. `chain` writes one `chainstate` batch:
+    - save new outputs to the `coins`;
+    - remove spent outputs from `coins`, create corresponding `undo` for the block;
+    - set `active` at the block's height;
+    - set `meta.tip` = the block hash and height.
 
-## Crash cases
+### Disconnecting the tip block
 
-| The node stops… | State on disk afterwards | Startup |
-|---|---|---|
-| during or after the append to `blocks`, before the `index` batch | bytes beyond the recorded write position | Ignored and overwritten by the next append; the block is downloaded again. |
-| after the `index` batch, before `utxo` committed the block | `utxo` tip is the parent; the block is stored | Activation connects the block. |
-| after `utxo` committed, before `chain` emitted events | `utxo` tip is the new block | Reconciliation makes it the active tip; the initial `chain.tip_changed` informs subscribers. |
-| by power loss, after `utxo` acknowledged several blocks | `utxo` lost its last commits; `chain` has every block durably | `utxo`'s tip is an ancestor; activation connects the rest. |
-| in the middle of a reorg | `utxo` tip is somewhere on the old or new branch | Reconciliation takes it as the tip; activation continues toward the most-work chain. |
-| while `chain` stored headers | some headers missing | Downloaded again from peers. |
-| while `net` rewrote `addresses` | the old or the new file | — |
+`chain` writes one `chainstate` batch:
 
-Events are not persisted. A subscriber that missed events catches up from the initial `chain.tip_changed` and from RPCs ([handling rules](events-and-hooks.md#handling-rules-for-subscribers)).
+- remove outputs created by the block from `coins`;
+- save outputs from block's `undo` to `coins`;
+- remove `undo` entry;
+- remove height record from `active`;
+- set `meta.tip` = its parent hash and height.
+
+The disconnected block stays in `blocks`.
+

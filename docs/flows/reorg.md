@@ -1,74 +1,80 @@
-# Reorg
+# Reorgs
 
-`chain` switches the active chain to a branch with more work. Rules: [best-chain activation](../daemons/chain/README.md#best-chain-activation), [utxo disconnect](../daemons/utxo/rpc.md#utxodisconnect_block), [storage crash cases](../architecture/storage.md#crash-cases).
+Modules: [block-sync](../modules/block-sync/README.md), [chain](../modules/chain/README.md), [net](../modules/net/README.md).
 
-Starting point: active chain `… F – A1 – A2` (tip A2). A competing branch `F – B1 – B2 – B3` arrives; B1 and B2 were stored earlier as a side branch with less work.
+During a reorg all other processes are paused, except maintaining the connections with peers **[Q18](../open-questions.md#q18)**.
 
-## Successful reorg
+In every case below `tip` is the height of the current tip block: all headers, and all blocks up to and including the tip block, are validated and stored. Heights are written relative to it: `tip+1`, `tip-k`, `tip+t`.
+
+## Height of a received header
+
+A header carries no height. When `block-sync` receives a header:
+
+- if its parent is stored in `chain`, its height is the parent's height plus one (`chain.validate_headers` returns it), and the cases below apply directly;
+- if its parent is not stored, `block-sync` first downloads the headers between the active chain and it (`getheaders` with a locator of the active chain to the peer that sent it, validated and stored through `chain`). Its height is then known and the matching case below applies.
+
+## Next header
+
+0. The current tip block is at height `tip`.
+1. `block-sync` receives a new header for height `tip+1`.
+2. After validation via `chain`, it has a valid chain work but does not connect to the tip block **[Q20](../open-questions.md#q20)**.
+3. `block-sync` searches for the last common ancestor (binary search) with `getheaders` probes on random peers ([last common ancestor search](../modules/block-sync/README.md#last-common-ancestor-search)) **[Q19](../open-questions.md#q19)**. Assume the last common ancestor is `tip-k`.
+4. `block-sync` downloads and verifies the k+1 headers from `tip-k+1` to `tip+1` (`getheaders` whose locator is the block at `tip-k`, then `chain.validate_headers` and `chain.store_headers`).
+5. The node is now in reorg mode.
+6. `block-sync` downgrades the tip sequentially to `tip-k` with `chain.disconnect_tip`, which updates the UTXO set and the other tables.
+7. `block-sync` downloads the blocks `tip-k+1` … `tip+1` sequentially (`getdata`, `MSG_WITNESS_BLOCK`), and validates them and updates the tip via `chain.connect_block`.
+
+Rejection of a block of the new branch during step 7, and a crash during steps 6–7: **[Q21](../open-questions.md#q21)**.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant BS as block-sync
-    participant C as chain
-    participant U as utxo
     participant N as net
-    participant TR as tx-relay
-
-    BS->>C: chain.submit_block (B3)
-    Note over C: checks pass, store B3<br/>branch B has more work than A
-    Note over C: fork point F
-    C->>U: utxo.disconnect_block (A2)
-    U-->>C: tip A1
-    C->>U: utxo.disconnect_block (A1)
-    U-->>C: tip F
-    C->>U: utxo.connect_block (B1)
-    U-->>C: ok
-    C->>U: utxo.connect_block (B2)
-    U-->>C: ok
-    C->>U: utxo.connect_block (B3)
-    U-->>C: ok
-    Note over C: emitted along the way:<br/>block_disconnected A2, A1<br/>block_connected B1, B2, B3
-    C-)N: chain.tip_changed (tip B3, connected [B1,B2,B3], disconnected [A2,A1])
-    C-)BS: chain.tip_changed
-    C-)TR: chain.tip_changed
-    C-->>BS: connected
-    Note over BS: announce B3 (headers B1–B3 or inv)
-    Note over TR: check cache inputs with utxo.unspent;<br/>A1/A2 transactions are not re-added
-```
-
-- Each `utxo.disconnect_block` and `utxo.connect_block` is atomic on its own. Between steps, the UTXO set is at a consistent intermediate tip. A crash anywhere in the middle restarts from that tip, and activation finishes the reorg ([storage.md](../architecture/storage.md#crash-cases)).
-- Read RPCs during a reorg can observe the intermediate tips.
-
-## Reorg to a branch that turns out invalid
-
-```mermaid
-sequenceDiagram
-    autonumber
     participant BS as block-sync
     participant C as chain
-    participant U as utxo
-
-    BS->>C: chain.submit_block (B3)
-    C->>U: utxo.disconnect_block (A2)
-    U-->>C: tip A1
-    C->>U: utxo.disconnect_block (A1)
-    U-->>C: tip F
-    C->>U: utxo.connect_block (B1)
-    U-->>C: ok
-    C->>U: utxo.connect_block (B2)
-    U-->>C: error invalid (bad-txns-inputs-missingorspent)
-    Note over C: mark B2 invalid, B3 failed_parent<br/>best candidate is now A2 (more work than B1)
-    C->>U: utxo.disconnect_block (B1)
-    U-->>C: tip F
-    C->>U: utxo.connect_block (A1)
-    U-->>C: ok
-    C->>U: utxo.connect_block (A2)
-    U-->>C: ok
-    Note over C: tip is A2 again: no chain.tip_changed<br/>(block_connected / block_disconnected<br/>were emitted for every step)
-    C-->>BS: error invalid (B2 failed while activating B3)
+    participant P as random peers
+    N-)BS: queue: {peer, headers [H at tip+1]}
+    BS->>C: validate_headers([H])
+    C-->>BS: ok, height tip+1, parent is not the tip block
+    loop binary search, about log2(tip) probes
+        BS->>C: header_at(m), header_at(m+1)
+        C-->>BS: active blocks at m and m+1
+        BS->>N: send(peer, getheaders [m], stop m+1)
+        N-)P: getheaders
+        P-)N: headers
+        N-)BS: queue: {peer, headers}
+    end
+    Note over BS: last common ancestor = tip-k
+    BS->>N: send(peer, getheaders [tip-k])
+    P-)N: headers tip-k+1 … tip+1
+    N-)BS: queue: {peer, headers}
+    BS->>C: validate_headers(tip-k+1 … tip+1)
+    C-->>BS: ok
+    BS->>C: store_headers(tip-k+1 … tip+1)
+    Note over BS: reorg mode
+    loop k times
+        BS->>C: disconnect_tip()
+        C-->>BS: new tip
+    end
+    Note over BS: tip block at height tip-k
+    loop blocks tip-k+1 … tip+1
+        BS->>N: send(peer, getdata block)
+        P-)N: block
+        N-)BS: queue: {peer, block}
+        BS->>C: connect_block(block)
+        C-->>BS: new tip
+    end
 ```
 
-- `chain.submit_block` for B3 returns `invalid` because B3's own ancestor failed and B3 is now marked `failed_parent`. `block-sync` punishes the peer that sent B3.
-- A1 and A2 were connected before and are known valid, so reconnecting them cannot fail unless the database is corrupt.
-- The tip ends where it started, so no `chain.tip_changed` is emitted. Subscribers of the per-block events see every step, including the undone B1. A transaction that tx-relay validated with `utxo.check_tx` while the UTXO set was at an intermediate tip may no longer fit; the cache check at the next tip change removes it.
+## Next header (+t)
+
+0. The current tip block is at height `tip`.
+1. `block-sync` receives a new header for height `tip+t`.
+2. `block-sync` downloads the headers `tip+1` … `tip+t` (`getheaders` with a locator of the active chain to the peer that sent the header). If the header at `tip+1` follows the tip block, it is NOT a reorg: the headers are processed as in [standard mode](standard-mode.md#new-header).
+3. Otherwise `block-sync` follows [Next header](#next-header) for the header at `tip+1`.
+
+## Current header or older
+
+0. The current tip block is at height `tip`.
+1. `block-sync` receives a new header for height `tip` or `tip-k`.
+2. The header is rejected. It is NOT a reorg **[Q22](../open-questions.md#q22)**.

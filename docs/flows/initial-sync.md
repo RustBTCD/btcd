@@ -1,100 +1,77 @@
 # Initial sync (IBD)
 
-Headers first, then blocks in parallel from many peers, connected in order. Rules: [block-sync](../daemons/block-sync/README.md), [chain](../daemons/chain/README.md), [utxo](../daemons/utxo/README.md).
+Modules: [block-sync](../modules/block-sync/README.md), [chain](../modules/chain/README.md), [net](../modules/net/README.md).
 
-## Header sync
+During IBD all other processes are paused, except maintaining the connections with peers **[Q18](../open-questions.md#q18)**.
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant P as sync peer P1 (outbound)
-    participant N as net
-    participant BS as block-sync
-    participant C as chain
+When the node is in IBD: **[Q23](../open-questions.md#q23)**.
 
-    N-)BS: net.peer_connected (P1, outbound, NODE_NETWORK)
-    Note over BS: ibd = true and no sync peer:<br/>P1 becomes the sync peer
-    BS->>C: chain.locator
-    C-->>BS: [genesis]
-    BS-)N: net.send getheaders
-    N->>P: getheaders
-    P->>N: headers (2000)
-    N-)BS: net.headers
-    BS->>C: chain.submit_headers
-    C-->>BS: ok, last = h2000, best_header = h2000
-    BS->>C: chain.locator (from h2000)
-    C-->>BS: locator
-    BS-)N: net.send getheaders
-    Note over BS,C: repeats until a headers message has fewer than 2000
-    Note over BS: after every submit_headers result:<br/>schedule block download (below)
-```
+## Downloading headers
 
-- Block download starts as soon as the first batch of headers is accepted; it does not wait for header sync to finish.
-- During IBD, headers and block `inv`s from inbound peers are ignored, and only one outbound peer serves headers.
-- No progress for `headers_timeout_secs` → `net.disconnect` the sync peer, pick another outbound peer.
-
-## Block download
+0. `block-sync` selects one peer, using `net` as the CRUD for peers **[Q12](../open-questions.md#q12)**.
+1. `block-sync` requests `getheaders` from it, in batches of 2000 headers. The first request carries a locator of the active chain; each next request carries the last header received ([block locator](../modules/block-sync/README.md#block-locator)).
+2. `block-sync` continues until it has downloaded all headers this peer knows: an answer with fewer than 2000 headers.
+3. `block-sync` validates the whole header chain by calling `chain.validate_headers`, and stores it with `chain.store_headers` **[Q11](../open-questions.md#q11)**.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant P1 as peer P1
-    participant P2 as peer P2
-    participant N as net
     participant BS as block-sync
+    participant N as net
+    participant P as sync peer
     participant C as chain
-    participant U as utxo
-
-    BS->>C: chain.missing_blocks (window 1024)
-    C-->>BS: [h1 … h1024]
-    Note over BS: up to 16 in flight per peer
-    BS-)N: net.send getdata (h1–h16) to P1
-    BS-)N: net.send getdata (h17–h32) to P2
-    N->>P1: getdata
-    N->>P2: getdata
-    P2->>N: block h17
-    N-)BS: net.block (P2, h17)
-    BS->>C: chain.submit_block (requested)
-    Note over C: checks pass, store durably;<br/>h1–h16 missing, nothing to connect
+    BS->>N: peers()
+    N-->>BS: connected peers
+    Note over BS: select one peer
+    loop until an answer has fewer than 2000 headers
+        BS->>N: send(peer, getheaders)
+        N-)P: getheaders
+        P-)N: headers (up to 2000)
+        N-)BS: queue: {peer, headers}
+    end
+    BS->>C: validate_headers(all downloaded headers)
+    C-->>BS: ok
+    BS->>C: store_headers(all downloaded headers)
     C-->>BS: stored
-    P1->>N: block h1
-    N-)BS: net.block (P1, h1)
-    BS->>C: chain.submit_block (requested)
-    Note over C: store, activate
-    C->>U: utxo.connect_block h1
-    U-->>C: ok
-    C-)BS: chain.tip_changed (tip h1)
-    C-->>BS: connected
-    Note over BS: refill: chain.missing_blocks,<br/>assign freed slots
 ```
 
-- Blocks arrive in any order. `chain` stores each one after its own checks and connects only along the chain, so `h17` waits until `h2`–`h16` are stored.
-- When the gap fills, one `chain.submit_block` call connects a whole run of stored blocks, one `utxo.connect_block` per block, and `chain.tip_changed` is split into events of at most 128 blocks.
-- During IBD, `tx-relay` ignores `chain.tip_changed` except for the `ibd` flag, and `block-sync` does not announce blocks.
-- Script checks are skipped for blocks below the assumevalid block ([chain](../daemons/chain/README.md#assumevalid)); every other check runs.
+At this point the node has the ~full header history, validated on the header level only. The downloaded headers form the candidate header chain.
 
-## Stalling
+Invalid headers, sync peer disconnect or timeout: **[Q12](../open-questions.md#q12)**, **[Q26](../open-questions.md#q26)**, **[Q27](../open-questions.md#q27)**.
+
+## Downloading blocks
+
+Blocks are downloaded from the beginning.
+
+1. The current tip block is at height `tip`: all headers, and all blocks up to and including the tip block, are validated and stored.
+2. `block-sync` knows the candidate header for `tip+1`. It sends `getdata` (`MSG_WITNESS_BLOCK`) for it to a random peer ([peer selection](../modules/block-sync/README.md#peer-selection)). Requests are made in batches **[Q13](../open-questions.md#q13)**.
+3. When the data for block `tip+1` is received, `block-sync` requests validation and tip update from `chain` (`connect_block`).
+4. If the block is valid and follows the tip block, `chain` updates the tip. Otherwise the block is rejected with the corresponding error.
+5. If the block is rejected, return to step 1 **[Q14](../open-questions.md#q14)**.
 
 ```mermaid
 sequenceDiagram
-    participant N as net
+    autonumber
     participant BS as block-sync
+    participant N as net
+    participant P as random peer
     participant C as chain
-    Note over BS: window exhausted: h1 … h1024 are stored or in flight,<br/>tip is h0, h1 in flight at P1 for longer than stall timeout
-    BS->>N: net.disconnect (P1, stalling)
-    N-->>BS: {}
-    N-)BS: net.peer_disconnected (P1)
-    Note over BS: h1 … h16 missing again;<br/>stall timeout doubles (2 s → 4 s)
-    BS->>C: chain.missing_blocks
-    C-->>BS: [h1 … h16]
-    BS-)N: net.send getdata (h1–h16) to P3
+    BS->>C: tip()
+    C-->>BS: tip
+    Note over BS: candidate headers tip+1 … tip+n<br/>from the candidate header chain
+    BS->>N: send(peer, getdata tip+1 … tip+n)
+    N-)P: getdata
+    P-)N: block tip+1
+    N-)BS: queue: {peer, block tip+1}
+    BS->>C: connect_block(tip+1)
+    alt valid and follows the tip block
+        C-->>BS: new tip block at tip+1
+    else rejected
+        C-->>BS: rejected {reason}
+        Note over BS: return to step 1
+    end
 ```
 
-A block requested more than `block_timeout_secs` ago is handled the same way, regardless of the window.
+Blocks of a batch that arrive before block `tip+1` is connected wait in `block-sync` until they are sequential.
 
-## End of IBD
-
-`chain` computes `ibd = false` once the tip has at least `min_chain_work` and is younger than `max_tip_age_hours`. The next `chain.tip_changed` carries `ibd: false`:
-
-- `block-sync` starts announcing new blocks, serves `getheaders`, and sends `getheaders` to every peer.
-- `tx-relay` sends real `feefilter` values to all peers and starts requesting announced transactions.
+End of IBD: **[Q23](../open-questions.md#q23)**.
