@@ -2,7 +2,7 @@
 
 | Flow | Covers |
 |---|---|
-| [connection.md](connection.md) | Connection flow, pings, requesting a peer, processing a request |
+| [communication.md](communication.md) | Connecting to a peer, pings, requesting a peer, processing a request |
 | [initial-sync.md](initial-sync.md) | IBD: downloading headers, downloading blocks |
 | [standard-mode.md](standard-mode.md) | New header, new transaction |
 | [reorg.md](reorg.md) | Next header, next header (+t), current header or older |

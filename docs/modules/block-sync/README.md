@@ -15,9 +15,9 @@ It selects peers using [net](../net/README.md) as the CRUD for peers.
 
 | Mode     | Flow                                             |
 |----------|--------------------------------------------------|
-| IBD      | [initial-sync.md](../../flows/initial-sync.md)   |
-| Standard | [standard-mode.md](../../flows/standard-mode.md) |
-| Reorg    | [reorg.md](../../flows/reorg.md)                 |
+| IBD      | [mode-ibd.md](../../flows/mode-ibd.md)           |
+| Standard | [standard-mode.md](../../flows/mode-standard.md) |
+| Reorg    | [reorg.md](../../flows/mode-reorg.md)            |
 
 During IBD and reorg, all other processes are paused, except maintaining the connections with peers.
 
@@ -98,7 +98,7 @@ A full locator finds that point in one round trip, however deep the divergence i
 dense near the tip and sparse further back: the tip, the 10 blocks before it, then steps that double at every entry,
 always ending with genesis. For a tip at height 1000 the heights are:
 
-    1000, 999, …, 990, 988, 984, 976, 960, 928, 864, 736, 480, 0
+    1000, 999, ..., 990, 988, 984, 976, 960, 928, 864, 736, 480, 0
 
 About 20 hashes cover any chain length. The protocol allows at most 101.
 
@@ -111,18 +111,3 @@ In the `block-sync` we use the following locators:
 | Probe at height `m` of the ancestor search | only the active block at `m`                                   | the active block at `m+1` | whether `m` and `m+1` are on the peer's chain ([last common ancestor search](#last-common-ancestor-search)) |
 
 An answer with fewer than 2000 headers means the peer has no more headers after it.
-
-## Last common ancestor search
-
-Binary search over the heights from 0 to the tip block's height on the active chain for the highest height whose block
-is also on the peer's chain. A probe at height `m` is a `getheaders` with the locator and stop hash
-given [above](#block-locator). The peer's `headers` answer means:
-
-| Answer                                                                                                  | Meaning                                                |
-|---------------------------------------------------------------------------------------------------------|--------------------------------------------------------|
-| first header is the active block at `m+1`                                                               | `m` and `m+1` are common: continue above `m`           |
-| first header's parent is the active block at `m`, and the first header is not the active block at `m+1` | the last common ancestor is `m`                        |
-| empty                                                                                                   | `m` is the peer's tip: the last common ancestor is `m` |
-| first header's parent is genesis, and `m > 0`                                                           | `m` is not on the peer's chain: continue below `m`     |
-
-The search takes about log2 of the tip block's height probes.
