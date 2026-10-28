@@ -45,9 +45,9 @@ The node is in one of three modes, owned by `block-sync`:
 
 | Mode     | Flow                                          | Other processes                              |
 |----------|-----------------------------------------------|----------------------------------------------|
-| IBD      | [initial-sync.md](../flows/initial-sync.md)   | Paused, except maintaining peer connections. |
-| Standard | [standard-mode.md](../flows/standard-mode.md) | —                                            |
-| Reorg    | [reorg.md](../flows/reorg.md)                 | Paused, except maintaining peer connections. |
+| IBD      | [mode-ibd.md](../flows/mode-ibd.md)           | Paused, except maintaining peer connections. |
+| Standard | [mode-standard.md](../flows/mode-standard.md) | —                                            |
+| Reorg    | [mode-reorg.md](../flows/mode-reorg.md)       | Paused, except maintaining peer connections. |
 
 ## Lifecycle
 

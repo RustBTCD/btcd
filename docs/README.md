@@ -27,7 +27,7 @@ Open questions are listed in [open-questions.md](open-questions.md) and referenc
 1. [architecture/overview.md](architecture/overview.md): modules, calls, queues, module boundaries, lifecycle.
 2. [architecture/storage.md](architecture/storage.md): stores, atomicity, write ordering.
 3. [modules/](modules/): one folder per module with entities, state and interface.
-4. [flows/](flows/README.md): connection, initial sync, standard mode, reorgs.
+4. [flows/](flows/README.md): communication, processing headers, IBD, standard mode, reorg.
 5. [open-questions.md](open-questions.md).
 
 ## Conventions

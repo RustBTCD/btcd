@@ -66,7 +66,7 @@ sequenceDiagram
 1. `block-sync` receives a new header for height `tip+t`.
 2. `block-sync` downloads the headers `tip+1` … `tip+t` (`getheaders` with a locator of the active chain to the peer
    that sent the header). If the header at `tip+1` follows the tip block, it is NOT a reorg: the headers are processed
-   as in [standard mode](standard-mode.md#new-header).
+   as in [standard mode](mode-standard.md#append-new-header).
 3. Otherwise `block-sync` follows [Next header](#next-header) for the header at `tip+1`.
 
 ## Current header or older

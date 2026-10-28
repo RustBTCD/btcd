@@ -18,21 +18,6 @@ Transport. Step 4 of "Requesting a peer" says `net` prepares the message with en
 
 Current text: the v1 message header (magic, command, length, checksum); encryption and authentication are unresolved.
 
-### Q3
-
-"Exchange features":
-
-- Which messages: `version`/`verack` only, or also `wtxidrelay`, `sendaddrv2` (both only valid before `verack`), `sendheaders`, `sendcmpct`?
-- Which services do we advertise, given that we serve no blocks or transactions?
-- Which `relay` flag do we send in `version`, given that we do not accept transactions?
-- `net` knows no messages except `ping`/`pong`. Which module handles the messages of the connection flow?
-
-Current text: `net` handles the connection flow messages; their content is unresolved.
-
-### Q4
-
-"Exchange tips": which messages carry the tips (the `start_height` field of `version`, `getheaders`/`headers`, something else), and is a peer's tip updated after the connection flow? Block download uses the peer's tip to pick peers that have a block.
-
 ### Q5
 
 Peers:
@@ -90,12 +75,6 @@ Sync peer:
 - What happens if it disconnects, stalls, or sends invalid headers.
 - How a sync peer that serves a valid but low-work header chain is detected.
 
-### Q13
-
-Batched block download: batch size, number of requests in flight, how many received blocks may wait for their predecessor.
-
-Current text: `blocks_per_request = 16`, `max_requests_in_flight = 8`.
-
 ### Q14
 
 A rejected block: "return to step 1" re-requests the same block at the height after the tip block.
@@ -111,7 +90,6 @@ Block validation:
 - Whether assumevalid is used.
 
 Current text: Bitcoin Core's checks; the script engine is unresolved.
-
 
 ### Q16
 
@@ -149,14 +127,6 @@ Failure during a reorg:
 
 ## Node
 
-### Q23
-
-IBD entry and exit:
-
-- Is the node always in IBD at startup?
-- When does it switch from IBD to standard mode (all headers of the sync peer connected, tip age, something else)?
-- How is `block-sync`'s candidate header chain rebuilt after a restart, when headers above the tip are already stored?
-
 ### Q24
 
 Operator interface: is there an RPC or CLI in v0.1 to read the tip, a block, a header, and peers?
@@ -179,7 +149,3 @@ Misbehaving peers (invalid headers, invalid blocks, invalid message headers): di
 Timeouts for `getheaders` and `getdata` requests, and what happens on timeout.
 
 Current text: `request_timeout_secs = 120`; behaviour on timeout unresolved.
-
-### Q28
-
-Shutdown: signals, order of stopping modules, flushing stores.

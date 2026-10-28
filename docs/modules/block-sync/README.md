@@ -16,8 +16,8 @@ It selects peers using [net](../net/README.md) as the CRUD for peers.
 | Mode     | Flow                                             |
 |----------|--------------------------------------------------|
 | IBD      | [mode-ibd.md](../../flows/mode-ibd.md)           |
-| Standard | [standard-mode.md](../../flows/mode-standard.md) |
-| Reorg    | [reorg.md](../../flows/mode-reorg.md)            |
+| Standard | [mode-standard.md](../../flows/mode-standard.md) |
+| Reorg    | [mode-reorg.md](../../flows/mode-reorg.md)       |
 
 During IBD and reorg, all other processes are paused, except maintaining the connections with peers.
 
