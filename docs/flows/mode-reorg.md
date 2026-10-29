@@ -4,21 +4,11 @@ During a reorg all other processes are paused, except maintaining the connection
 
 ## Next header
 
-1. The current tip block is at height `tip`.
-2. `block-sync` receives a new header candidate for height `tip+1`.
-3. The `chain.validate_headers` says that it is valid, but it does not connect to the tip block.
-4. `block-sync` searches for the last common ancestor (binary search) with `getheaders` probes on random
-   peers ([last common ancestor search](../modules/block-sync/README.md#last-common-ancestor-search)) *
-   *[Q19](../open-questions.md#q19)**. Assume the last common ancestor is `tip-k`.
-5. `block-sync` downloads and verifies the k+1 headers from `tip-k+1` to `tip+1` (`getheaders` whose locator is the
-   block at `tip-k`, then `chain.validate_headers` and `chain.store_headers`).
-6. The node is now in reorg mode.
-7. `block-sync` downgrades the tip sequentially to `tip-k` with `chain.disconnect_tip`, which updates the UTXO set and
-   the other tables.
-8. `block-sync` downloads the blocks `tip-k+1` … `tip+1` sequentially (`getdata`, `MSG_WITNESS_BLOCK`), and validates
-   them and updates the tip via `chain.connect_block`.
-
-Rejection of a block of the new branch during step 7, and a crash during steps 6–7: **[Q21](../open-questions.md#q21)**.
+Reorg happens if in the standard mode, we fund a valid chain of headers A..B, where A belongs to the node's current
+chain, every header (A+1)..B does not belong to the node's chain and B > tip. It means that we found a chain that is
+longer than ours — so we have to reorganize our node. The chain of A..B usually appears when the node receives a header
+with unknown parent, so it starts searching LCA as described
+in [processing-headers](mode-standard.md#processing-headers).
 
 ```mermaid
 sequenceDiagram
@@ -27,50 +17,22 @@ sequenceDiagram
     participant BS as block-sync
     participant C as chain
     participant P as random peers
-    N -) BS: queue: {peer, headers [H at tip+1]}
-    BS ->> C: validate_headers([H])
-    C -->> BS: ok, height tip+1, parent is not the tip block
-    loop binary search, about log2(tip) probes
-        BS ->> C: header_at(m), header_at(m+1)
-        C -->> BS: active blocks at m and m+1
-        BS ->> N: send(peer, getheaders [m], stop m+1)
-        N -) P: getheaders
-        P -) N: headers
-        N -) BS: queue: {peer, headers}
-    end
-    Note over BS: last common ancestor = tip-k
-    BS ->> N: send(peer, getheaders [tip-k])
-    P -) N: headers tip-k+1 … tip+1
-    N -) BS: queue: {peer, headers}
-    BS ->> C: validate_headers(tip-k+1 … tip+1)
+    Note over BS: knows alternative chain of headers tip-k ... tip+1, where tip-k is LCA
+    BS ->> C: chain.validate_headers(tip-k+1 … tip+1)
     C -->> BS: ok
-    BS ->> C: store_headers(tip-k+1 … tip+1)
+    BS ->> C: chain.store_headers(tip-k+1 … tip+1)
     Note over BS: reorg mode
     loop k times
-        BS ->> C: disconnect_tip()
+        BS ->> C: chain.disconnect_tip()
         C -->> BS: new tip
     end
     Note over BS: tip block at height tip-k
-    loop blocks tip-k+1 … tip+1
-        BS ->> N: send(peer, getdata block)
+    loop block \in tip-k+1 ... tip+1
+        BS ->> N: net.send(peer, "getdata", getdata block)
         P -) N: block
         N -) BS: queue: {peer, block}
-        BS ->> C: connect_block(block)
+        BS ->> C: chain.connect_block(block)
         C -->> BS: new tip
     end
+    Note over BS: standard mode
 ```
-
-## Next header (+t)
-
-0. The current tip block is at height `tip`.
-1. `block-sync` receives a new header for height `tip+t`.
-2. `block-sync` downloads the headers `tip+1` … `tip+t` (`getheaders` with a locator of the active chain to the peer
-   that sent the header). If the header at `tip+1` follows the tip block, it is NOT a reorg: the headers are processed
-   as in [standard mode](mode-standard.md#append-new-header).
-3. Otherwise `block-sync` follows [Next header](#next-header) for the header at `tip+1`.
-
-## Current header or older
-
-0. The current tip block is at height `tip`.
-1. `block-sync` receives a new header for height `tip` or `tip-k`.
-2. The header is rejected. It is NOT a reorg **[Q22](../open-questions.md#q22)**.
