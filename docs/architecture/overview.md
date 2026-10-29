@@ -28,6 +28,8 @@ flowchart LR
 
 `chain` calls no other module. `net` calls no other module; it only pushes routed messages into queues.
 
+Queues are bounded. Messages are never dropped from a queue: a full queue is a node failure, and the node stops.
+
 ## Module boundaries
 
 Modules are kept separable so that each interaction can later be carried by a message bus instead of a call or a queue:

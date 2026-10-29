@@ -20,7 +20,7 @@ to [block-sync](../block-sync/README.md).
 | Undo data per block                                              | `chainstate`, `undo`   |
 | Active chain by height: block hash, block time, median time past | `chainstate`, `active` |
 | Tip                                                              | `chainstate`, `meta`   |
-| Headers with height, cumulative chain work, status               | `headers`, `headers`   |
+| Valid headers with height, cumulative chain work                 | `headers`, `headers`   |
 | Blocks                                                           | `blocks`, `blocks`     |
 
 Stores and tables: [storage.md](../../architecture/storage.md).
@@ -82,8 +82,8 @@ Direct calls. In v0.1 the only caller is `block-sync`. Calls that write are exec
 | Call               | Input                                               | Output                                                                                                                                          |
 |--------------------|-----------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------|
 | `validate_headers` | headers in chain order, each extending the previous | `ok {first_height, last_height, last_chain_work}`, or `rejected {index, reason}`, or `not_connected` if the first header's parent is not stored |
-| `store_headers`    | headers for which `validate_headers` returned `ok`  | stored with height, chain work, status `valid`; `not_connected` if the first header's parent is not stored                                      |
-| `header`           | block hash                                          | stored header entry `{header, height, chain_work, status, has_block}`, or not found; `has_block` is true when the block is in `blocks`          |
+| `store_headers`    | headers for which `validate_headers` returned `ok`  | stored with height and chain work; `not_connected` if the first header's parent is not stored                                                   |
+| `header`           | block hash                                          | stored header entry `{header, height, chain_work, has_block}`, or not found; `has_block` is true when the block is in `blocks`                  |
 | `header_at`        | height                                              | header entry of the active chain at that height, or not found                                                                                   |
 
 `validate_headers` writes nothing.
@@ -97,7 +97,7 @@ Direct calls. In v0.1 the only caller is `block-sync`. Calls that write are exec
 
 `connect_block`:
 
-1. The block's header MUST be stored with status `valid`; otherwise `rejected {unknown-header}`.
+1. The block's header MUST be stored; otherwise `rejected {unknown-header}`.
 2. The block's parent MUST be the tip block; otherwise `rejected {not-sequential}`.
 3. Run the [block validation](#blocks). If invalid: `rejected {reason}` and nothing is written.
 4. Store the block, apply it to the UTXO set and move the

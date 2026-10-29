@@ -23,6 +23,14 @@ peer:
 
 ---
 
+## Peers
+
+Known peers come only from the configuration (`peers`). Configured peers are trusted. `net` keeps a connection to every
+configured peer. When a peer disconnects, `net` connects to it again after `reconnect_delay_secs`. `net` does not accept
+inbound connections.
+
+---
+
 ## Connection flow
 
 ```
@@ -65,7 +73,7 @@ bytes (Core's `MAX_PROTOCOL_MESSAGE_LENGTH`).
 
 1. `net` receives a message. It can also be a response to one of our previous requests.
 2. `net` routes the message to the module that owns its command ([routing table](#routing-table)): it pushes
-   `{peer, command, payload}` to the `block-sync` queue.
+   `{peer, command, payload}` to the `block-sync` queue. If the queue is full, it is a node failure and the node stops.
 3. `block-sync` initiates a request to respond to the peer, if a response is needed.
 
 ### Routing table
@@ -113,5 +121,6 @@ Send the message to the peer (id) if it is `connected`. The output will be route
 
 ```toml
 [net]
-peers = []                 # initial peers: ["host:port", "host:port"]
+peers = []                 # peers to connect to: ["host:port", "host:port"]
+reconnect_delay_secs = 30  # delay before reconnecting to a disconnected peer
 ```

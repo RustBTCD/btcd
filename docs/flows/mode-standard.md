@@ -3,6 +3,33 @@
 In standard mode the node receives headers from random connected peers. Upon receiving the header, the `block-sync` has
 to decide if to process is it follows th tip or if we have to reorganize the chain.
 
+Peers announce new blocks with `headers` or with `inv` ([processing inventory](#processing-inventory)).
+
+## Processing inventory
+
+An `inv` message announces objects by hash only. `block-sync` uses it only to learn about new headers. Upon receiving
+a message from queue, the `block-sync` keeps the entries of type `MSG_BLOCK` while skipping all other entries. For each
+kept block hash, `block-sync` calls `chain.header`, and skips hashes whose header is stored.
+
+Upon finding the new header, we process it in [processing headers](#processing-headers).
+
+Note, that `block-sync` does not answer an `inv` with `getdata` because blocks are requested only for stored headers.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant P as peer
+    participant N as net
+    participant BS as block-sync
+    participant C as chain
+    P -) N: inv [MSG_BLOCK H, other entries]
+    N -) BS: queue: {peer, "inv", inv}
+    Note over BS: keep MSG_BLOCK entries<br/>skip the others
+    BS ->> C: chain.header(H)
+    C -->> BS: not found
+    Note over BS: processing header
+```
+
 ## Processing headers
 
 ### Problem statement
@@ -55,7 +82,7 @@ are skipped (step 3 below).
 
 So, imagine we received a header from random peer. After validation (if successful) we have to find its
 theoretical height. We first try searching its parent in `headers` table. If the entry exists, we will obtain all
-information we may need (i.e. height and status). Otherwise, we start trying searching the last common ancestor (LCA).
+information we may need (i.e. height). Otherwise, we start trying searching the last common ancestor (LCA).
 
 ```mermaid
 sequenceDiagram
@@ -114,5 +141,7 @@ sequenceDiagram
         end
     end
 ```
+
+A rejected block is handled as in [IBD](mode-ibd.md#downloading-blocks).
 
 

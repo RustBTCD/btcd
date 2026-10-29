@@ -1,6 +1,8 @@
 # Bode: Initial Block Download
 
 During IBD all other processes are paused, except maintaining the connections with peers.
+Messages in the `block-sync` queue that are not part of the IBD are skipped. A message is part of the IBD when it
+answers a request `block-sync` sent for the IBD.
 
 The node enters IBD on first launch, when the database is clear and tip is genesis block.
 
@@ -53,7 +55,11 @@ Blocks are downloaded from the beginning.
    `connect_block`).
 4. If the block is valid and follows the tip block, `chain` updates the tip. Otherwise, the block is rejected with the
    corresponding error.
-5. If the block is rejected, return to step 1.
+5. If the block is rejected:
+    - if the rejection reason shows a mutated block, `block-sync`
+      requests the block from another peer and returns to step 1;
+    - otherwise the block is invalid by consensus while its header is valid: `block-sync` reports a consensus failure
+      and the node stops.
 
 ```mermaid
 sequenceDiagram
@@ -76,7 +82,7 @@ sequenceDiagram
             C -->> BS: ok
         else rejected
             C -->> BS: rejected {reason}
-            Note over BS: return to step 1
+            Note over BS: step 5
         end
     end
 ```

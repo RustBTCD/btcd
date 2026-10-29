@@ -10,12 +10,12 @@ A **store** is the unit of atomicity: a set of tables written together in all-or
 - A store belongs to exactly one module.
 - There is no atomicity across stores. Consistency across stores is defined by [write ordering](#write-ordering).
 
-| Module | Store        | Tables                            | Path                                   |
-|--------|--------------|-----------------------------------|----------------------------------------|
+| Module | Store        | Tables                            | Path                                    |
+|--------|--------------|-----------------------------------|-----------------------------------------|
 | chain  | `chainstate` | `coins`, `undo`, `active`, `meta` | `<datadir>/<network>/chain/chainstate/` |
-| chain  | `headers`    | `headers`                         | `<datadir>/<network>/chain/headers/`   |
-| chain  | `blocks`     | `blocks`                          | `<datadir>/<network>/chain/blocks/`    |
-| net    | `peer-list`  | `peer-list`                       | `<datadir>/<network>/net/peer-list/`   |
+| chain  | `headers`    | `headers`                         | `<datadir>/<network>/chain/headers/`    |
+| chain  | `blocks`     | `blocks`                          | `<datadir>/<network>/chain/blocks/`     |
+| net    | `peer-list`  | `peer-list`                       | `<datadir>/<network>/net/peer-list/`    |
 
 `block-sync` has no store. Note that `headers` and `blocks` are separate stores: a block body and its header never need
 to change together.
@@ -47,9 +47,11 @@ The UTXO set and the tip are in one store, so a block is applied or reverted tog
 
 ## headers
 
-| Table     | Key        | Value                                                    | Profile      |
-|-----------|------------|----------------------------------------------------------|--------------|
-| `headers` | block hash | header (80 bytes), height, cumulative chain work, status | point lookup |
+Only valid headers are stored.
+
+| Table     | Key        | Value                                            | Profile      |
+|-----------|------------|--------------------------------------------------|--------------|
+| `headers` | block hash | header (80 bytes), height, cumulative chain work | point lookup |
 
 ## blocks
 
