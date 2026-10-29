@@ -7,7 +7,7 @@ v0.1 runs as one process containing three modules: `net`, `chain`, `block-sync`.
 ```mermaid
 flowchart LR
     peers(["Bitcoin peers"])
-    subgraph node["rbtc process"]
+    subgraph node["Vakthund process"]
         net["net"]
         bs["block-sync"]
         chain["chain"]
@@ -62,7 +62,7 @@ table ([net](../modules/net/README.md#configuration), [chain](../modules/chain/R
 
 ```toml
 network = "main"           # main | testnet4 | signet | regtest
-datadir = "~/.rbtc"        # stores live under <datadir>/<network>/
+datadir = "~/.vakthund"        # stores live under <datadir>/<network>/
 ```
 
 ## Dependencies
