@@ -89,7 +89,11 @@ As Bitcoin Core's `CheckBlockHeader` and `ContextualCheckBlockHeader`:
 - proof of work: the header hash is at most the target encoded in `bits`;
 - `bits` equals the required target (`GetNextWorkRequired`);
 - timestamp above the median time past of the previous 11 blocks and at most 2 hours in the future;
-- version at least the minimum required after BIP34, BIP66 and BIP65.
+- version at least the minimum required after BIP34, BIP66 and BIP65;
+- BIP94 networks only (testnet4): a header at a height that is a multiple of 2016 has a timestamp of at least the
+  parent's timestamp minus 600 seconds (`MAX_TIMEWARP`, `time-timewarp-attack`);
+- BIP94 networks only (testnet4): the retarget at a height that is a multiple of 2016 derives the new target from the
+  `bits` of the first header of the finished period, not of the last (`CalculateNextWorkRequired`).
 
 Contextual checks need the parent header, so the parent of the first header of a call MUST be stored.
 
