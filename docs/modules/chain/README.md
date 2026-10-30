@@ -37,7 +37,50 @@ height 0. The genesis coinbase output is not added to the UTXO set, as in Bitcoi
 ## Validation
 
 Consensus rules are the ones active at the height of the header or block on the network in use (main, testnet4, signet,
-regtest), with the deployment heights of rust-bitcoin's network parameters.
+regtest). The `chain` module validates headers and blocks with the constants of the
+[consensus parameters](#consensus-parameters) table below. From rust-bitcoin's network parameters `chain` takes only
+the proof-of-work parameters: proof-of-work limit, target spacing, target timespan, the min-difficulty flag and the
+no-retargeting flag.
+
+### Consensus parameters
+
+Values as in Bitcoin Core `kernel/chainparams.cpp`. A rule "from height h" is active for blocks at height h and above.
+
+| Constant                               | main                                                                            | testnet4 | signet    | regtest |
+|----------------------------------------|---------------------------------------------------------------------------------|----------|-----------|---------|
+| BIP34 height (height in coinbase)      | 227931, hash `000000000000024b89b42a942fe0d9fea3bb44ab7bd1b19115dd6a759c0808b8` | 1        | 1         | 1       |
+| BIP66 height (strict DER)              | 363725                                                                          | 1        | 1         | 1       |
+| BIP65 height (CHECKLOCKTIMEVERIFY)     | 388381                                                                          | 1        | 1         | 1       |
+| CSV height (BIP68, BIP112, BIP113)     | 419328                                                                          | 1        | 1         | 1       |
+| SegWit height (BIP141, BIP143, BIP147) | 481824                                                                          | 1        | 1         | 0       |
+| Subsidy halving interval, blocks       | 210000                                                                          | 210000   | 210000    | 150     |
+| Coinbase maturity, blocks              | 100                                                                             | 100      | 100       | 100     |
+| BIP94 enforced (testnet4 rules)        | no                                                                              | yes      | no        | no      |
+| Signet block signature (BIP325)        | no                                                                              | no       | yes       | no      |
+| Signet challenge                       | —                                                                               | —        | see below | —       |
+
+Signet challenge (default signet), hex:
+
+```
+512103ad5e0edad18cb1f0fc0d28a3d4f1f3e445640337489abb10404f2d1e086be430210359ef5021964fe22d6f8e05b2463c9540ce96883fe3b278760f048f5189f2e6c452ae
+```
+
+Script verification flags of a block, as Bitcoin Core's `GetBlockScriptFlags`:
+
+| Flag                         | Active                 |
+|------------------------------|------------------------|
+| `P2SH`, `WITNESS`, `TAPROOT` | every block            |
+| `DERSIG`                     | from the BIP66 height  |
+| `CHECKLOCKTIMEVERIFY`        | from the BIP65 height  |
+| `CHECKSEQUENCEVERIFY`        | from the CSV height    |
+| `NULLDUMMY`                  | from the SegWit height |
+
+Two main blocks are exceptions and are verified with the listed flags only:
+
+| Block hash                                                         | Flags             |
+|--------------------------------------------------------------------|-------------------|
+| `00000000000002dc756eebf4f49723ed8d30cc28a5f108eb94b1ba88ac4f9c22` | none              |
+| `0000000000000000000f14c35b2d841e986ab5441de8c585d5ffe55ea1e395ad` | `P2SH`, `WITNESS` |
 
 ### Headers
 
