@@ -118,7 +118,9 @@ As Bitcoin Core's `CheckBlock` and `ContextualCheckBlock`:
 
 - merkle root, no duplicate transactions, size and weight limits, exactly one coinbase at position 0, `CheckTransaction`
   for every transaction, legacy sigop limit;
-- transaction finality, BIP34 coinbase height, BIP141 witness commitment.
+- transaction finality, BIP34 coinbase height, BIP141 witness commitment;
+- signet only: the coinbase witness commitment carries a solution to the signet challenge of the
+  [consensus parameters](#consensus-parameters) (BIP325, `bad-signet-blksig`).
 
 As Bitcoin Core's `ConnectBlock`, against the UTXO set:
 
