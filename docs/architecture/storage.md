@@ -85,20 +85,19 @@ Only valid headers are stored.
 
 1. `chain` writes the block to `blocks`.
 2. `chain` writes one `chainstate` batch:
-    - save new outputs to the `coins`;
-    - remove spent outputs from `coins`, create corresponding `undo` for the block;
-    - set `active` at the block's height;
-    - set `meta.tip` = the block hash and height.
+    1. save new outputs to the `coins`;
+    2. remove spent outputs from `coins`, create corresponding `undo` for the block;
+    3. set `active` at the block's height;
+    4. set `meta.tip` = the block hash and height.
 
 ### Disconnecting the tip block
 
 `chain` writes one `chainstate` batch:
 
-- remove outputs created by the block from `coins`;
-- save outputs from block's `undo` to `coins`;
-- remove `undo` entry;
-- remove height record from `active`;
-- set `meta.tip` = its parent hash and height.
+1. remove outputs created by the block from `coins`;
+2. save outputs from block's `undo` to `coins`;
+3. remove `undo` entry;
+4. remove height record from `active`;
+5. set `meta.tip` = its parent hash and height.
 
 The disconnected block stays in `blocks`.
-

@@ -104,11 +104,13 @@ sequenceDiagram
     end
     BS ->> C: chain.validate_headers(LCA + 1 ... H)
     C -->> BS: ok
-    Note over BS: Evals H height from LCA
+    Note over BS: H.height = LCA.height + number of headers<br/> H.chain_work = last_chain_work
 ```
 
-If the LCA is the current tip we continue in the [standard flow](#append-new-header). Otherwise, we fall
-into [reorg mode](./mode-reorg.md).
+If the LCA is the current tip we continue in the [standard flow](#append-new-header). Otherwise, the chain work of H
+(`last_chain_work` returned by `validate_headers`) is compared with the chain work of the tip
+([chain work](../modules/chain/README.md#chain-work)): if it is greater, we fall into [reorg mode](./mode-reorg.md);
+if it is at most the chain work of the tip, the headers LCA + 1 ... H are not stored.
 
 ### Append new header
 

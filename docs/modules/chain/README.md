@@ -50,6 +50,25 @@ As Bitcoin Core's `CheckBlockHeader` and `ContextualCheckBlockHeader`:
 
 Contextual checks need the parent header, so the parent of the first header of a call MUST be stored.
 
+### Chain work
+
+The work of a header is the expected number of hash evaluations needed to meet its target, as Bitcoin Core's
+`GetBlockProof`:
+
+```
+target = the 256-bit integer encoded by the header's `bits`
+work   = floor(2^256 / (target + 1))
+```
+
+The chain work of a header is the sum of the work of the header and of all its ancestors: the chain work of the genesis
+header is its work; the chain work of every other header is the chain work of its parent plus its work.
+`validate_headers` computes it from `bits` after the `bits` check above and returns it as `last_chain_work`;
+`store_headers` stores it in the header entry. The chain work of the tip is the chain work of the tip block's header
+entry, returned by `tip`.
+
+Two header chains are compared by chain work, never by height: the chain whose last header has the greater chain work
+has more work. On equal chain work the node keeps its current chain, as Bitcoin Core.
+
 ### Blocks
 
 As Bitcoin Core's `CheckBlock` and `ContextualCheckBlock`:
