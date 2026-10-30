@@ -6,10 +6,10 @@ module must process each message.
 
 ## State
 
-| State                                                                        | Where             |
-|------------------------------------------------------------------------------|-------------------|
-| Known peers: address, features                                               | table `peer-list` |
-| Per known peer while the process runs: id, connection state, tip, ping times | memory            |
+| State                                                                   | Where             |
+|-------------------------------------------------------------------------|-------------------|
+| Known peers: address, features                                          | table `peer-list` |
+| Per known peer while the process runs: id, connection state, ping times | memory            |
 
 For the `peer-list` table details see ([storage.md](../../architecture/storage.md#peer-list)). In memory, per known
 peer:
@@ -18,7 +18,6 @@ peer:
 |--------------------------|-------------------------------------------------------------------|
 | `id`                     | Peer identifier assigned by `net`, unique while the process runs. |
 | `state`                  | `known` (not connected), `connecting`, `connected`.               |
-| `tip`                    | The peer's tip received during the connection flow.               |
 | `last_ping`, `last_pong` | Times of the last `ping` sent and the last `pong` received.       |
 
 ---
@@ -34,7 +33,7 @@ inbound connections.
 ## Connection flow
 
 ```
-Connect TCP -> Assume peer connected -> Exchange features -> Exchange tips
+Connect TCP -> Assume peer connected -> Exchange features
 ```
 
 TBD

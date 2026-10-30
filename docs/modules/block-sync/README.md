@@ -31,8 +31,8 @@ batches (until included into chain), etc.
 
 ### Communication
 
-The module accepts input messages from queue filled by `net`. It also may have triggers for request timeouts. The module
-may call directly both `net` and `chain` modules:
+The module accepts input messages from queue filled by `net`. It also has timers for request timeouts. The module may
+call directly both `net` and `chain` modules:
 
 | Module  | Calls                                                                                                |
 |---------|------------------------------------------------------------------------------------------------------|
@@ -69,8 +69,8 @@ TBD
 
 ### Peer selection
 
-| Request                     | Peers eligible                                                                                                                  |
-|-----------------------------|---------------------------------------------------------------------------------------------------------------------------------|
-| Header download (IBD)       | one random connected peer                                                                                                       |
-| Block download              | random connected peers whose features include `NODE_NETWORK` and `NODE_WITNESS`, and whose tip is at least the requested height |
-| Last common ancestor search | the peer that sent the header                                                                                                   |
+| Request                     | Peers eligible                                                                                                                                                                                                                                                                                                                                            |
+|-----------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Header download (IBD)       | one random connected peer: the sync peer                                                                                                                                                                                                                                                                                                                  |
+| Block download              | first the peer the blocks were learned from: the sync peer in IBD, the peer that announced the header in standard mode and in a reorg. If that peer does not answer within the request timeout or answers `notfound`, random connected peers whose features include `NODE_NETWORK` and `NODE_WITNESS`, one after another, until a peer returns the block. |
+| Last common ancestor search | the peer that sent the header                                                                                                                                                                                                                                                                                                                             |

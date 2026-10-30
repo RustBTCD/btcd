@@ -15,16 +15,9 @@ sequenceDiagram
     N -) P: features
     P -) N: features
     Note over N: store peer features in peer-list
-    N -) P: tip
-    P -) N: tip
-    Note over N: keep peer tip in memory
 ```
 
 ### Features
-
-TBD
-
-### Exchange tip
 
 TBD
 

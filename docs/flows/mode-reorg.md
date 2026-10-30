@@ -20,7 +20,7 @@ sequenceDiagram
     participant N as net
     participant BS as block-sync
     participant C as chain
-    participant P as random peers
+    participant P as announcing peer, then random peers
     Note over BS: knows alternative chain of headers tip-k ... tip+1, where tip-k is LCA
     BS ->> C: chain.validate_headers(tip-k+1 … tip+1)
     C -->> BS: ok
@@ -33,8 +33,10 @@ sequenceDiagram
     Note over BS: tip block at height tip-k
     loop block \in tip-k+1 ... tip+1
         BS ->> N: net.send(peer, "getdata", getdata block)
+        Note over BS: if no answer within the request timeout, or notfound —<br/>request block from a random connected peer,<br/>until collect it
+        N -) P: getdata
         P -) N: block
-        N -) BS: queue: {peer, block}
+        N -) BS: queue: {peer, "block", block}
         BS ->> C: chain.connect_block(block)
         C -->> BS: new tip
     end

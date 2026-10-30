@@ -49,8 +49,8 @@ Blocks are downloaded from the beginning.
 
 1. The current tip block is at height `tip`: all headers, and all blocks up to and including the tip block, are
    validated and stored.
-2. `block-sync` knows the candidate header for `tip+1`. It sends `getdata` (`MSG_WITNESS_BLOCK`) for it to the same
-   peer. Requests are made in batches (TBD).
+2. `block-sync` knows the candidate header for `tip+1`. It sends `getdata` (`MSG_WITNESS_BLOCK`) for it to the sync
+   peer; if the sync peer does not answer, to random eligible peers ([peer selection](../modules/block-sync/README.md#peer-selection)). Requests are made in batches (TBD).
 3. When the data for block `tip+1` is received, `block-sync` requests validation and tip update from `chain` (
    `connect_block`).
 4. If the block is valid and follows the tip block, `chain` updates the tip. Otherwise, the block is rejected with the
@@ -66,15 +66,16 @@ sequenceDiagram
     autonumber
     participant BS as block-sync
     participant N as net
-    participant P as random peer
+    participant P as sync peer, then random peers
     participant C as chain
     BS ->> C: chain.tip()
     C -->> BS: tip
     Note over BS: knows candidate headers tip+1..tip+n<br/>
-    BS ->> N: net.send(peer, "getdata", getdata[tip+1..tip+n])
+    BS ->> N: net.send(sync peer, "getdata", getdata[tip+1..tip+n])
     N -) P: getdata
     P -) N: block[tip+1..tip+n]
     N -) BS: queue: {peer, "block", block[tip+1..tip+n]}
+    Note over BS: if no answer within the request timeout, or notfound —<br/>request the missing blocks from a random connected peer,<br/>until collects all of them
     loop for k in 1..n
         BS ->> C: chain.connect_block(tip+k)
         alt Block valid and follows the tip

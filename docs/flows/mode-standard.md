@@ -114,24 +114,24 @@ if it is at most the chain work of the tip, the headers LCA + 1 ... H are not st
 
 ### Append new header
 
-If the LCA is the current tip, we can just update it sequentially.
+If the LCA is the current tip, we can just update it sequentially. The blocks `tip + 1 ... H` are requested from the
+peer that announced H; if it does not answer, from random eligible peers ([peer selection](../modules/block-sync/README.md#peer-selection)).
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant P1 as some peer
+    participant P1 as announcing peer, then random peers
     participant N as net
     participant BS as block-sync
     participant C as chain
-    participant P2 as random peer
     Note over BS: Has validated headers[tip + 1 ... H]
-    C -->> BS: ok
     BS ->> C: chain.store_headers(headers[tip + 1 ... H])
     C -->> BS: ok
-    BS ->> N: net.send(P2, "getdata", getdata [tip + 1 ... H]])
-    N -) P2: getdata
-    P2 -) N: block [tip + 1 ... H]
-    N -) BS: queue: {P2, "block", block [tip + 1 ... H]}
+    BS ->> N: net.send(announcing peer, "getdata", getdata [tip + 1 ... H])
+    N -) P1: getdata
+    P1 -) N: block [tip + 1 ... H]
+    N -) BS: queue: {announcing peer, "block", block [tip + 1 ... H]}
+    Note over BS: if no answer within the request timeout, or notfound —<br/>request the missing blocks from a random connected peer,<br/>until collects all of them
     loop for B in block [tip + 1 ... H]
         BS ->> C: chain.connect_block(B)
         alt Block valid and follows the tip
