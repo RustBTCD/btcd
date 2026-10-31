@@ -95,6 +95,18 @@ We first try searching its parent in the `headers` table. If the entry exists, w
 need (i.e. height). Otherwise, we start searching the last common ancestor (LCA). A block hash from an `inv` has no
 known parent and starts the LCA search directly ([processing inventory](#processing-inventory)).
 
+The LCA search is a loop of `getheaders` requests to the peer that announced H. The first request carries a full locator
+of the active chain, each next request a locator consisting of the last header received; every request carries
+`hash_stop = H`. After each `headers` answer:
+
+- if the answer has 2000 headers and does not end with H, the search continues with the next request;
+- if the answer ends with H, the search is complete: the collected headers are `LCA + 1 ... H`;
+- otherwise (fewer than 2000 headers without H, including an empty answer) H is no longer on the peer's active chain:
+  the collected headers are discarded and H is dropped.
+
+An empty `headers` message from a peer with an outstanding `getheaders` is the answer to that request. A request that
+is not answered within the request timeout ends the search as a dropped H.
+
 ```mermaid
 sequenceDiagram
     autonumber
@@ -106,12 +118,17 @@ sequenceDiagram
     N -) BS: queue: {peer, H}
     BS ->> C: chain.header(H.parent)
     C -->> BS: not found
-    loop find all headers LCA + 1 ... H
+    loop until an answer has fewer than 2000 headers or ends with H
         Note over BS: build locator
         BS ->> N: net.send(peer, "getheaders", getheaders{locator, stop = H})
         N -) P: getheaders
         P -) N: headers (LCA + 1 ... H)
         N -) BS: queue: {peer, headers}
+    end
+    alt the last answer ends with H
+        Note over BS: collected headers = LCA + 1 ... H
+    else fewer than 2000 headers without H, or timeout
+        Note over BS: discard collected headers, drop H
     end
     BS ->> C: chain.validate_headers(LCA + 1 ... H)
     C -->> BS: ok
