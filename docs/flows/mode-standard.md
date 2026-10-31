@@ -1,17 +1,23 @@
 # Mode: Standard
 
-In standard mode the node receives headers from random connected peers. Upon receiving the header, the `block-sync` has
-to decide if to process is it follows th tip or if we have to reorganize the chain.
-
-Peers announce new blocks with `headers` or with `inv` ([processing inventory](#processing-inventory)).
+In standard mode the node receives block announcements from connected peers. Because `net` sends `sendheaders` in the
+connection flow, a peer normally announces a new block with a `headers` message carrying the block's header. A peer
+falls back to an `inv` carrying only the block hash when it has more than 8 blocks to announce or does not yet know
+which blocks the node has ([processing inventory](#processing-inventory)). For every announced header `block-sync`
+decides whether it follows the tip or whether the chain has to be reorganized.
 
 ## Processing inventory
 
-An `inv` message announces objects by hash only. `block-sync` uses it only to learn about new headers. Upon receiving
-a message from queue, the `block-sync` keeps the entries of type `MSG_BLOCK` while skipping all other entries. For each
-kept block hash, `block-sync` calls `chain.header`, and skips hashes whose header is stored.
+An `inv` message announces objects by hash only: for a block, `block-sync` learns the 32-byte block hash H. So,
+`block-sync` uses `inv` only to learn about new headers. Upon receiving a message from the queue, it keeps
+the entries of type `MSG_BLOCK` while skipping all other entries. For each kept block hash, `block-sync` calls
+`chain.header(H)`, and skips hashes whose header is stored.
 
-Upon finding the new header, we process it in [processing headers](#processing-headers).
+For a new hash, `block-sync` obtains the header by sending `getheaders` to the announcing peer with a full locator of
+the active chain and `hash_stop = H`. This is the last common ancestor search of
+[processing headers](#processing-headers), entered directly, since there is no parent to look up. The `headers` answer
+carries the header of H and of every block between the active chain and H; from there the flow continues as for a
+header received in a `headers` message.
 
 Note, that `block-sync` does not answer an `inv` with `getdata` because blocks are requested only for stored headers.
 
@@ -27,7 +33,11 @@ sequenceDiagram
     Note over BS: keep MSG_BLOCK entries<br/>skip the others
     BS ->> C: chain.header(H)
     C -->> BS: not found
-    Note over BS: processing header
+    BS ->> N: net.send(peer, "getheaders", getheaders{locator, stop = H})
+    N -) P: getheaders
+    P -) N: headers (LCA + 1 ... H)
+    N -) BS: queue: {peer, "headers", headers}
+    Note over BS: processing headers
 ```
 
 ## Processing headers
@@ -80,9 +90,10 @@ are skipped (step 3 below).
 
 ### Flow
 
-So, imagine we received a header from random peer. After validation (if successful) we have to find its
-theoretical height. We first try searching its parent in `headers` table. If the entry exists, we will obtain all
-information we may need (i.e. height). Otherwise, we start trying searching the last common ancestor (LCA).
+So, imagine we received a header from a peer. After validation (if successful) we have to find its theoretical height.
+We first try searching its parent in the `headers` table. If the entry exists, we will obtain all information we may
+need (i.e. height). Otherwise, we start searching the last common ancestor (LCA). A block hash from an `inv` has no
+known parent and starts the LCA search directly ([processing inventory](#processing-inventory)).
 
 ```mermaid
 sequenceDiagram
@@ -115,7 +126,8 @@ if it is at most the chain work of the tip, the headers LCA + 1 ... H are not st
 ### Append new header
 
 If the LCA is the current tip, we can just update it sequentially. The blocks `tip + 1 ... H` are requested from the
-peer that announced H; if it does not answer, from random eligible peers ([peer selection](../modules/block-sync/README.md#peer-selection)).
+peer that announced H; if it does not answer, from random eligible
+peers ([peer selection](../modules/block-sync/README.md#peer-selection)).
 
 ```mermaid
 sequenceDiagram

@@ -1,8 +1,8 @@
 # net
 
 `net` is the module responsible for handling peers, and the CRUD for peers. It maintains the `peer-list` table: all
-known peers and the features stored for each of them. It knows nothing about messages except `ping`/`pong` and which
-module must process each message.
+known peers and the features stored for each of them. It knows nothing about messages except `ping`/`pong`, the commands
+of the connection flow, and which module must process each message.
 
 ## State
 
@@ -33,10 +33,14 @@ inbound connections.
 ## Connection flow
 
 ```
-Connect TCP -> Assume peer connected -> Exchange features
+Connect TCP -> Assume peer connected -> Exchange features -> sendheaders
 ```
 
-TBD
+TBD (features)
+
+The last step of the flow: `net` sends `sendheaders` (BIP130, empty payload). From then on the peer announces a new
+block with a `headers` message carrying the block's header, instead of an `inv` carrying only its hash. A peer still
+announces with `inv` when it has more than 8 blocks to announce or does not yet know which blocks the node has.
 
 ---
 
@@ -80,7 +84,7 @@ bytes (Core's `MAX_PROTOCOL_MESSAGE_LENGTH`).
 | Command                                                        | Owner        |
 |----------------------------------------------------------------|--------------|
 | `ping`, `pong`                                                 | `net`        |
-| *Commands of the connection flow*                              | `net`        |                                               
+| *Commands of the connection flow*                              | `net`        |
 | `headers`, `block`, `inv`, `notfound`, `getheaders`, `getdata` | `block-sync` |
 | *Every other command*                                          | none in v0.1 |
 

@@ -15,11 +15,18 @@ sequenceDiagram
     N -) P: features
     P -) N: features
     Note over N: store peer features in peer-list
+    N -) P: sendheaders
+    Note over P: announces new blocks with headers (BIP130)
 ```
 
 ### Features
 
 TBD
+
+### sendheaders
+
+`net` sends `sendheaders` (BIP130, empty payload) once the features are exchanged. The peer then announces new blocks
+with `headers` messages instead of `inv` ([standard mode](mode-standard.md)).
 
 ---
 
